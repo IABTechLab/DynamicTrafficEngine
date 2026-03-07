@@ -1,0 +1,937 @@
+Legal Notices
+====================
+
+Component: httpclient5
+Version: 5.1.3
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.httpcomponents.client5/httpclient5@5.1.3?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: mockito-core
+Version: 5.11.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.mockito/mockito-core@5.11.0?type=jar
+Licenses:
+  - MIT (https://opensource.org/license/mit/)
+
+Component: Saxon-HE
+Version: 10.5
+Publisher: Saxonica
+Package URL (PURL): pkg:maven/net.sf.saxon/Saxon-HE@10.5?type=jar
+Licenses:
+  - MPL-2.0 (https://www.mozilla.org/MPL/2.0/)
+
+Component: javassist
+Version: 3.26.0-GA
+Publisher: Shigeru Chiba, www.javassist.org
+Package URL (PURL): pkg:maven/org.javassist/javassist@3.26.0-GA?type=jar
+Licenses:
+  - MPL-1.1 (No URL provided)
+  - LGPL-2.1-only (No URL provided)
+  - Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Component: commons-codec
+Version: 1.15
+Publisher: Unknown
+Package URL (PURL): pkg:maven/commons-codec/commons-codec@1.15?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: metrics-spi
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/metrics-spi@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: netty-codec-http
+Version: 4.1.108.Final
+Publisher: Unknown
+Package URL (PURL): pkg:maven/io.netty/netty-codec-http@4.1.108.Final?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: asm-tree
+Version: 9.5
+Publisher: OW2
+Package URL (PURL): pkg:maven/org.ow2.asm/asm-tree@9.5?type=jar
+Licenses:
+  - BSD-3-Clause (https://opensource.org/licenses/BSD-3-Clause)
+
+Component: asm-commons
+Version: 9.6
+Publisher: OW2
+Package URL (PURL): pkg:maven/org.ow2.asm/asm-commons@9.6?type=jar
+Licenses:
+  - BSD-3-Clause (https://opensource.org/licenses/BSD-3-Clause)
+
+Component: commons-text
+Version: 1.10.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.commons/commons-text@1.10.0?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: resilience4j-retry
+Version: 2.2.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/io.github.resilience4j/resilience4j-retry@2.2.0?type=jar
+Licenses:
+  - Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Component: checker-qual
+Version: 3.8.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.checkerframework/checker-qual@3.8.0?type=jar
+Licenses:
+  - MIT (No URL provided)
+
+Component: s3
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/s3@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: mockito-junit-jupiter
+Version: 5.11.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.mockito/mockito-junit-jupiter@5.11.0?type=jar
+Licenses:
+  - MIT (https://opensource.org/license/mit/)
+
+Component: crt-core
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/crt-core@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: reflections
+Version: 0.9.12
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.reflections/reflections@0.9.12?type=jar
+Licenses:
+  - WTFPL (http://www.wtfpl.net/about/)
+  - BSD-3-Clause (No URL provided)
+
+Component: guava
+Version: 30.1.1-jre
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.google.guava/guava@30.1.1-jre?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: commons-math3
+Version: 3.6.1
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.commons/commons-math3@3.6.1?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: antlr
+Version: 2.7.7
+Publisher: Unknown
+Package URL (PURL): pkg:maven/antlr/antlr@2.7.7?type=jar
+Licenses:
+  - BSD-3-Clause (No URL provided)
+
+Component: endpoints-spi
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/endpoints-spi@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: apiguardian-api
+Version: 1.1.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apiguardian/apiguardian-api@1.1.2?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: netty-handler
+Version: 4.1.108.Final
+Publisher: Unknown
+Package URL (PURL): pkg:maven/io.netty/netty-handler@4.1.108.Final?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: Saxon-HE
+Version: 12.4
+Publisher: Saxonica
+Package URL (PURL): pkg:maven/net.sf.saxon/Saxon-HE@12.4?type=jar
+Licenses:
+  - MPL-2.0 (https://www.mozilla.org/MPL/2.0/)
+
+Component: listenablefuture
+Version: 9999.0-empty-to-avoid-conflict-with-guava
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.google.guava/listenablefuture@9999.0-empty-to-avoid-conflict-with-guava?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: gson
+Version: 2.10.1
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.google.code.gson/gson@2.10.1?type=jar
+Licenses:
+  - Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Component: commons-text
+Version: 1.12.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.commons/commons-text@1.12.0?type=jar
+Licenses:
+  - Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Component: aws-core
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/aws-core@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: utils
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/utils@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: http-client-spi
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/http-client-spi@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: log4j-core
+Version: 2.22.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.logging.log4j/log4j-core@2.22.0?type=jar
+Licenses:
+  - Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Component: http-auth-aws
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/http-auth-aws@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: netty-resolver
+Version: 4.1.108.Final
+Publisher: Unknown
+Package URL (PURL): pkg:maven/io.netty/netty-resolver@4.1.108.Final?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: j2objc-annotations
+Version: 3.0.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.google.j2objc/j2objc-annotations@3.0.0?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: slf4j-api
+Version: 2.0.12
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.slf4j/slf4j-api@2.0.12?type=jar
+Licenses:
+  - MIT (https://opensource.org/license/mit/)
+
+Component: slf4j-api
+Version: 2.0.9
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.slf4j/slf4j-api@2.0.9?type=jar
+Licenses:
+  - MIT (https://opensource.org/license/mit/)
+
+Component: slf4j-api
+Version: 2.0.11
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.slf4j/slf4j-api@2.0.11?type=jar
+Licenses:
+  - MIT (https://opensource.org/license/mit/)
+
+Component: httpcore5
+Version: 5.1.3
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.httpcomponents.core5/httpcore5@5.1.3?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: org.jacoco.report
+Version: 0.8.9
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.jacoco/org.jacoco.report@0.8.9?type=jar
+Licenses:
+  - EPL-2.0 (https://www.eclipse.org/legal/epl-2.0)
+
+Component: sdk-core
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/sdk-core@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: json-path
+Version: 2.9.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.jayway.jsonpath/json-path@2.9.0?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: junit-jupiter-api
+Version: 5.10.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.junit.jupiter/junit-jupiter-api@5.10.2?type=jar
+Licenses:
+  - EPL-2.0 (No URL provided)
+
+Component: xmlresolver
+Version: 5.2.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.xmlresolver/xmlresolver@5.2.2?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: aws-query-protocol
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/aws-query-protocol@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: xmlresolver
+Version: 5.2.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.xmlresolver/xmlresolver@5.2.2?classifier=data&type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: netty-codec
+Version: 4.1.108.Final
+Publisher: Unknown
+Package URL (PURL): pkg:maven/io.netty/netty-codec@4.1.108.Final?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: arns
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/arns@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: commons-collections
+Version: 3.2.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/commons-collections/commons-collections@3.2.2?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: http-auth
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/http-auth@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: jackson-annotations
+Version: 2.17.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.fasterxml.jackson.core/jackson-annotations@2.17.0?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: commons-configuration2
+Version: 2.11.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.commons/commons-configuration2@2.11.0?type=jar
+Licenses:
+  - Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Component: netty-codec-http2
+Version: 4.1.108.Final
+Publisher: Unknown
+Package URL (PURL): pkg:maven/io.netty/netty-codec-http2@4.1.108.Final?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: ssooidc
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/ssooidc@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: annotations
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/annotations@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: sso
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/sso@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: netty-common
+Version: 4.1.108.Final
+Publisher: Unknown
+Package URL (PURL): pkg:maven/io.netty/netty-common@4.1.108.Final?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: byte-buddy
+Version: 1.14.9
+Publisher: Unknown
+Package URL (PURL): pkg:maven/net.bytebuddy/byte-buddy@1.14.9?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: log4j-core
+Version: 2.23.1
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.logging.log4j/log4j-core@2.23.1?type=jar
+Licenses:
+  - Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Component: auth
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/auth@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: checkstyle
+Version: 8.45
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.puppycrawl.tools/checkstyle@8.45?type=jar
+Licenses:
+  - LGPL-2.1+ (https://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html)
+
+Component: asm-util
+Version: 9.6
+Publisher: OW2
+Package URL (PURL): pkg:maven/org.ow2.asm/asm-util@9.6?type=jar
+Licenses:
+  - BSD-3-Clause (https://opensource.org/licenses/BSD-3-Clause)
+
+Component: json-smart
+Version: 2.5.0
+Publisher: Chemouni Uriel
+Package URL (PURL): pkg:maven/net.minidev/json-smart@2.5.0?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: checker-qual
+Version: 3.42.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.checkerframework/checker-qual@3.42.0?type=jar
+Licenses:
+  - MIT (No URL provided)
+
+Component: commons-lang3
+Version: 3.14.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.commons/commons-lang3@3.14.0?type=jar
+Licenses:
+  - Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Component: spotbugs-annotations
+Version: 4.8.3
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.github.spotbugs/spotbugs-annotations@4.8.3?type=jar
+Licenses:
+  - LGPL-2.1-only (No URL provided)
+
+Component: jackson-databind
+Version: 2.17.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.17.0?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: byte-buddy-agent
+Version: 1.14.12
+Publisher: Unknown
+Package URL (PURL): pkg:maven/net.bytebuddy/byte-buddy-agent@1.14.12?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: error_prone_annotations
+Version: 2.26.1
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.google.errorprone/error_prone_annotations@2.26.1?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: aws-json-protocol
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/aws-json-protocol@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: commons-beanutils
+Version: 1.9.4
+Publisher: Unknown
+Package URL (PURL): pkg:maven/commons-beanutils/commons-beanutils@1.9.4?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: objenesis
+Version: 3.3
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.objenesis/objenesis@3.3?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: opentest4j
+Version: 1.3.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.opentest4j/opentest4j@1.3.0?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: junit-jupiter-params
+Version: 5.10.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.junit.jupiter/junit-jupiter-params@5.10.2?type=jar
+Licenses:
+  - EPL-2.0 (No URL provided)
+
+Component: sts
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/sts@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: asm-analysis
+Version: 9.6
+Publisher: OW2
+Package URL (PURL): pkg:maven/org.ow2.asm/asm-analysis@9.6?type=jar
+Licenses:
+  - BSD-3-Clause (https://opensource.org/licenses/BSD-3-Clause)
+
+Component: json-utils
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/json-utils@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: identity-spi
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/identity-spi@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: jsr305
+Version: 3.0.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.google.code.findbugs/jsr305@3.0.2?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: http-auth-spi
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/http-auth-spi@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: junit-platform-commons
+Version: 1.10.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.junit.platform/junit-platform-commons@1.10.2?type=jar
+Licenses:
+  - EPL-2.0 (No URL provided)
+
+Component: asm-commons
+Version: 9.5
+Publisher: OW2
+Package URL (PURL): pkg:maven/org.ow2.asm/asm-commons@9.5?type=jar
+Licenses:
+  - BSD-3-Clause (https://opensource.org/licenses/BSD-3-Clause)
+
+Component: junit-jupiter
+Version: 5.10.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.junit.jupiter/junit-jupiter@5.10.2?type=jar
+Licenses:
+  - EPL-2.0 (No URL provided)
+
+Component: jcip-annotations
+Version: 1.0-1
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.github.stephenc.jcip/jcip-annotations@1.0-1?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: log4j-api
+Version: 2.22.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.logging.log4j/log4j-api@2.22.0?type=jar
+Licenses:
+  - Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Component: asm
+Version: 9.5
+Publisher: OW2
+Package URL (PURL): pkg:maven/org.ow2.asm/asm@9.5?type=jar
+Licenses:
+  - BSD-3-Clause (https://opensource.org/licenses/BSD-3-Clause)
+
+Component: apache-client
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/apache-client@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: jackson-core
+Version: 2.17.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.fasterxml.jackson.core/jackson-core@2.17.0?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: netty-transport-native-unix-common
+Version: 4.1.108.Final
+Publisher: Unknown
+Package URL (PURL): pkg:maven/io.netty/netty-transport-native-unix-common@4.1.108.Final?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: spotbugs
+Version: 4.8.3
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.github.spotbugs/spotbugs@4.8.3?type=jar
+Licenses:
+  - LGPL-2.1-only (No URL provided)
+
+Component: accessors-smart
+Version: 2.5.0
+Publisher: Chemouni Uriel
+Package URL (PURL): pkg:maven/net.minidev/accessors-smart@2.5.0?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: org.jacoco.agent
+Version: 0.8.9
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.jacoco/org.jacoco.agent@0.8.9?type=jar
+Licenses:
+  - EPL-2.0 (https://www.eclipse.org/legal/epl-2.0)
+
+Component: eventstream
+Version: 1.0.1
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.eventstream/eventstream@1.0.1?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: regions
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/regions@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: junit-platform-launcher
+Version: 1.10.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.junit.platform/junit-platform-launcher@1.10.2?type=jar
+Licenses:
+  - EPL-2.0 (No URL provided)
+
+Component: netty-transport-classes-epoll
+Version: 4.1.108.Final
+Publisher: Unknown
+Package URL (PURL): pkg:maven/io.netty/netty-transport-classes-epoll@4.1.108.Final?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: checksums
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/checksums@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: org.jacoco.ant
+Version: 0.8.9
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.jacoco/org.jacoco.ant@0.8.9?type=jar
+Licenses:
+  - EPL-2.0 (https://www.eclipse.org/legal/epl-2.0)
+
+Component: jaxen
+Version: 2.0.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/jaxen/jaxen@2.0.0?type=jar
+Licenses:
+  - Unknown (https://raw.githubusercontent.com/jaxen-xpath/jaxen/master/LICENSE.txt)
+
+Component: byte-buddy
+Version: 1.14.12
+Publisher: Unknown
+Package URL (PURL): pkg:maven/net.bytebuddy/byte-buddy@1.14.12?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: picocli
+Version: 4.6.1
+Publisher: Unknown
+Package URL (PURL): pkg:maven/info.picocli/picocli@4.6.1?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: asm
+Version: 9.6
+Publisher: OW2
+Package URL (PURL): pkg:maven/org.ow2.asm/asm@9.6?type=jar
+Licenses:
+  - BSD-3-Clause (https://opensource.org/licenses/BSD-3-Clause)
+
+Component: j2objc-annotations
+Version: 1.3
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.google.j2objc/j2objc-annotations@1.3?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: org.jacoco.core
+Version: 0.8.9
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.jacoco/org.jacoco.core@0.8.9?type=jar
+Licenses:
+  - EPL-2.0 (https://www.eclipse.org/legal/epl-2.0)
+
+Component: failureaccess
+Version: 1.0.1
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.google.guava/failureaccess@1.0.1?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: httpcore5-h2
+Version: 5.1.3
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.httpcomponents.core5/httpcore5-h2@5.1.3?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: checksums-spi
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/checksums-spi@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: antlr4-runtime
+Version: 4.9.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.antlr/antlr4-runtime@4.9.2?type=jar
+Licenses:
+  - BSD-4-Clause (No URL provided)
+
+Component: aws-xml-protocol
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/aws-xml-protocol@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: lombok
+Version: 1.18.30
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.projectlombok/lombok@1.18.30?type=jar
+Licenses:
+  - MIT (No URL provided)
+
+Component: slf4j-simple
+Version: 2.0.12
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.slf4j/slf4j-simple@2.0.12?type=jar
+Licenses:
+  - MIT (https://opensource.org/license/mit/)
+
+Component: error_prone_annotations
+Version: 2.5.1
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.google.errorprone/error_prone_annotations@2.5.1?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: slf4j-api
+Version: 1.7.30
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.slf4j/slf4j-api@1.7.30?type=jar
+Licenses:
+  - MIT (https://opensource.org/license/mit/)
+
+Component: commons-codec
+Version: 1.17.1
+Publisher: Unknown
+Package URL (PURL): pkg:maven/commons-codec/commons-codec@1.17.1?type=jar
+Licenses:
+  - Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Component: asm
+Version: 9.3
+Publisher: OW2
+Package URL (PURL): pkg:maven/org.ow2.asm/asm@9.3?type=jar
+Licenses:
+  - BSD-3-Clause (https://opensource.org/licenses/BSD-3-Clause)
+
+Component: netty-nio-client
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/netty-nio-client@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: asm-tree
+Version: 9.6
+Publisher: OW2
+Package URL (PURL): pkg:maven/org.ow2.asm/asm-tree@9.6?type=jar
+Licenses:
+  - BSD-3-Clause (https://opensource.org/licenses/BSD-3-Clause)
+
+Component: reactive-streams
+Version: 1.0.4
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.reactivestreams/reactive-streams@1.0.4?type=jar
+Licenses:
+  - MIT-0 (https://github.com/aws/mit-0)
+
+Component: bcel
+Version: 6.8.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.bcel/bcel@6.8.0?type=jar
+Licenses:
+  - Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Component: commons-logging
+Version: 1.3.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/commons-logging/commons-logging@1.3.2?type=jar
+Licenses:
+  - Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Component: junit-platform-engine
+Version: 1.10.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.junit.platform/junit-platform-engine@1.10.2?type=jar
+Licenses:
+  - EPL-2.0 (No URL provided)
+
+Component: netty-buffer
+Version: 4.1.108.Final
+Publisher: Unknown
+Package URL (PURL): pkg:maven/io.netty/netty-buffer@4.1.108.Final?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: log4j-api
+Version: 2.23.1
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.logging.log4j/log4j-api@2.23.1?type=jar
+Licenses:
+  - Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Component: third-party-jackson-core
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/third-party-jackson-core@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: junit-jupiter-engine
+Version: 5.10.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.junit.jupiter/junit-jupiter-engine@5.10.2?type=jar
+Licenses:
+  - EPL-2.0 (No URL provided)
+
+Component: dom4j
+Version: 2.1.4
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.dom4j/dom4j@2.1.4?type=jar
+Licenses:
+  - Plexus (https://fedoraproject.org/wiki/Licensing/Plexus_Classworlds_License)
+
+Component: findsecbugs-plugin
+Version: 1.12.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.h3xstream.findsecbugs/findsecbugs-plugin@1.12.0?type=jar
+Licenses:
+  - Unknown (http://www.gnu.org/copyleft/lesser.html)
+
+Component: netty-transport
+Version: 4.1.108.Final
+Publisher: Unknown
+Package URL (PURL): pkg:maven/io.netty/netty-transport@4.1.108.Final?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: profiles
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/profiles@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: protocol-core
+Version: 2.25.41
+Publisher: Unknown
+Package URL (PURL): pkg:maven/software.amazon.awssdk/protocol-core@2.25.41?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: failureaccess
+Version: 1.0.2
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.google.guava/failureaccess@1.0.2?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: httpclient
+Version: 4.5.13
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.httpcomponents/httpclient@4.5.13?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: guava
+Version: 33.2.1-jre
+Publisher: Unknown
+Package URL (PURL): pkg:maven/com.google.guava/guava@33.2.1-jre?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+
+Component: resilience4j-core
+Version: 2.2.0
+Publisher: Unknown
+Package URL (PURL): pkg:maven/io.github.resilience4j/resilience4j-core@2.2.0?type=jar
+Licenses:
+  - Apache-2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+Component: httpcore
+Version: 4.4.13
+Publisher: Unknown
+Package URL (PURL): pkg:maven/org.apache.httpcomponents/httpcore@4.4.13?type=jar
+Licenses:
+  - Apache-2.0 (No URL provided)
+

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved
+     SPDX-License-Identifier: Apache-2.0
+-->
+<FindBugsFilter>
+    <!-- Add exclusions here if needed -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+    <!-- Exclude generated sources if any -->
+    <Match>
+        <Class name="~.*\.generated\..*" />
+    </Match>
+    <!-- Exclude model classes if needed -->
+    <Match>
+        <Class name="~.*\.model\..*" />
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+</FindBugsFilter>

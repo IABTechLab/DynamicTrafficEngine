@@ -1,0 +1,28 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# v3.2.4
+dir: mocks/interfaces
+filename: '{{.InterfaceName}}.go'
+force-file-write: true
+formatter: goimports
+log-level: info
+structname: '{{.InterfaceName}}'
+pkgname: '{{.SrcPackageName}}'
+packages:
+  golang.a2z.com/demanddriventrafficevaluator/interfaces:
+    config:
+      recursive: true
+    interfaces:
+      ModelConfigurationHandlerInterface:
+      TrafficAllocatorInterface:
+      ModelEvaluator:
+      TrafficAllocationContextInterface:
+      ModelResultHandlerInterface:
+      LocalCacheRegistryInterface:
+      DaoFactoryInterface:
+      LocalCacheFactoryInterface:
+      ConfigurationHandlerInterface:
+      ExperimentConfigurationHandlerInterface:
+      TimeProvider:
+      Task:

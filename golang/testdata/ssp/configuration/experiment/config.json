@@ -1,0 +1,24 @@
+{
+    "type": "ExperimentConfiguration",
+    "experimentDefinitionByName": {
+        "DemandDrivenTrafficEvaluatorSoftFilter": {
+            "name": "DemandDrivenTrafficEvaluatorSoftFilter",
+            "type": "soft-filter",
+            "treatments": [
+                {
+                    "treatmentCode": "T",
+                    "weight": 80
+                },
+                {
+                    "treatmentCode": "C",
+                    "weight": 20
+                }
+            ],
+            "startTimeUTC": 1654498800000,
+            "endTimeUTC": 1727334000000
+        }
+    },
+    "modelToExperiment": {
+        "adsp_low-value_v2": "DemandDrivenTrafficEvaluatorSoftFilter"
+    }
+}

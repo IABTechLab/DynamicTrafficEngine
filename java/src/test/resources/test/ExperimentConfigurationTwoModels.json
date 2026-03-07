@@ -1,0 +1,33 @@
+{
+  "type": "ExperimentConfiguration",
+  "experimentDefinitionByName": {
+    "DemandDrivenTrafficEvaluatorSoftFilter": {
+      "name": "DemandDrivenTrafficEvaluatorSoftFilter",
+      "type": "soft-filter",
+      "treatments": [
+        {
+          "treatmentCode": "T",
+          "idStart": "0",
+          "idEnd": "0",
+          "weight": 0
+        },
+        {
+          "treatmentCode": "C",
+          "idStart": "0",
+          "idEnd": "4095",
+          "weight": 100
+        }
+      ],
+      "salt": "edf2e9cbdd2d1134",
+      "startTimeUTC": 1654498800000,
+      "endTimeUTC": 1727334000000,
+      "allocationIdStart": "0",
+      "allocationIdEnd": "4095",
+      "hash": true
+    }
+  },
+  "modelToExperiment": {
+    "adsp_low-value_v2": "DemandDrivenTrafficEvaluatorSoftFilter",
+    "adsp_high-priority-deals_v1": "DemandDrivenTrafficEvaluatorSoftFilter"
+  }
+}

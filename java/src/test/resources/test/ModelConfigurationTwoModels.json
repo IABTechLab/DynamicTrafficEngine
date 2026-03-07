@@ -1,0 +1,179 @@
+{
+  "type": "ModelConfiguration",
+  "modelDefinitionByIdentifier": {
+    "adsp_low-value_v2": {
+      "identifier": "adsp_low-value_v2",
+      "dsp": "adsp",
+      "name": "low-value",
+      "version": "v2",
+      "modelType": "LowValue",
+      "featureExtractorType": "JsonExtractor",
+      "features": [
+        {
+          "name": "isMobile",
+          "fields": [
+            "$.app"
+          ],
+          "transformation": [
+            "Exists",
+            "ApplyMappings"
+          ],
+          "mapping": {
+            "0": "site",
+            "1": "app"
+          },
+          "mappingDefaultValue": null
+        },
+        {
+          "name": "isVideo",
+          "fields": [
+            "$.imp[0].video"
+          ],
+          "transformation": [
+            "Exists",
+            "ApplyMappings"
+          ],
+          "mapping": {
+            "0": "banner",
+            "1": "video"
+          },
+          "mappingDefaultValue": null
+        },
+        {
+          "name": "publisherId",
+          "fields": [
+            "$.site.publisher.id",
+            "$.app.publisher.id"
+          ],
+          "transformation": [
+            "GetFirstNotEmpty"
+          ]
+        },
+        {
+          "name": "country",
+          "fields": [
+            "$.device.geo.country"
+          ],
+          "transformation": []
+        },
+        {
+          "name": "slotSize",
+          "fields": [
+            "$.imp[0].video.w",
+            "$.imp[0].video.h",
+            "$.imp[0].banner.w",
+            "$.imp[0].banner.h"
+          ],
+          "transformation": [
+            "ConcatenateByPair",
+            "GetFirstNotEmpty"
+          ]
+        },
+        {
+          "name": "slotPosition",
+          "fields": [
+            "$.imp[0].video.pos",
+            "$.imp[0].banner.pos"
+          ],
+          "transformation": [
+            "GetFirstNotEmpty",
+            "ApplyMappings"
+          ],
+          "mapping": {
+            "1": "a",
+            "4": "a",
+            "7": "a",
+            "3": "b"
+          },
+          "mappingDefaultValue": "u"
+        },
+        {
+          "name": "deviceType",
+          "fields": [
+            "$.device.devicetype"
+          ],
+          "transformation": [
+            "GetFirstNotEmpty",
+            "ApplyMappings"
+          ],
+          "mapping": {
+            "1": "5",
+            "2": "2",
+            "3": "3",
+            "4": "4",
+            "5": "5",
+            "6": "6",
+            "7": "7",
+            "8": "8"
+          },
+          "mappingDefaultValue": "0"
+        }
+      ]
+    },
+    "adsp_high-priority-deals_v1": {
+      "identifier": "adsp_high-priority-deals_v1",
+      "dsp": "adsp",
+      "name": "high-priority-deals",
+      "version": "v1",
+      "modelType": "HighValue",
+      "featureExtractorType": "JsonExtractor",
+      "features": [
+        {
+          "name": "dealId",
+          "fields": [
+            "$.imp[0].pmp.deals[*].id"
+          ],
+          "transformation": [
+          ],
+          "mappingDefaultValue": null
+        },
+        {
+          "name": "isVideo",
+          "fields": [
+            "$.imp[0].video"
+          ],
+          "transformation": [
+            "Exists",
+            "ApplyMappings"
+          ],
+          "mapping": {
+            "0": "DISPLAY",
+            "1": "VIDEO"
+          },
+          "mappingDefaultValue": null
+        },
+        {
+          "name": "deviceType",
+          "fields": [
+            "$.device.devicetype"
+          ],
+          "transformation": [
+            "GetFirstNotEmpty",
+            "ApplyMappings"
+          ],
+          "mapping": {
+            "1": "MOBILE",
+            "2": "DESKTOP",
+            "3": "CONNECTEDTV",
+            "4": "MOBILE",
+            "5": "MOBILE",
+            "6": "CONNECTEDDEVICE",
+            "7": "CONNECTEDTV",
+            "8": "UNKNOWN"
+          },
+          "mappingDefaultValue": "UNKNOWN"
+        },
+        {
+          "name": "country",
+          "fields": [
+            "$.device.geo.country"
+          ],
+          "transformation": [
+            "IncludeDefaultValue"
+          ],
+          "mappingDefaultValue": "ALL"
+        }
+      ]
+    }
+  }
+}
