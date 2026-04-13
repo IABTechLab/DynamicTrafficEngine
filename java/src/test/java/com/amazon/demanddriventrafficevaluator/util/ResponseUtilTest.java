@@ -3,13 +3,9 @@
 
 package com.amazon.demanddriventrafficevaluator.util;
 
-import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.AggregatedModelEvaluationResult;
-import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.EvaluationContext;
-import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.ModelEvaluationContext;
-import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.ModelEvaluationStatus;
-import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.ModelEvaluatorOutput;
-import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.Signal;
-import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.Slot;
+import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.*;
+import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.protobuf.ResponseMetadata;
+import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.protobuf.SlotMetadata;
 import com.amazon.demanddriventrafficevaluator.repository.entity.ModelDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,6 +22,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -59,7 +56,7 @@ class ResponseUtilTest {
         assertEquals(1, slots.size());
         Slot slot = slots.get(0);
         assertEquals(0.8, slot.getFilterDecision());
-        assertTrue(slot.getExt().contains("\"decision\":0.7"));
+        assertTrue(slot.toExt().contains("\"decision\":0.7"));
     }
 
     @Test
@@ -150,5 +147,37 @@ class ResponseUtilTest {
         assertTrue(debugInfo.contains("[ModelLevelDebugInfo]"));
         assertTrue(debugInfo.contains("Model Debug 1"));
         assertTrue(debugInfo.contains("Model Debug 2"));
+    }
+
+    @Test
+    public void testEncodedDecodeProto() {
+        ResponseMetadata expectedResponse =
+                ResponseMetadata
+                        .newBuilder()
+                        .addSlots(SlotMetadata.newBuilder().setDecision(99))
+                        .setLearning(111)
+                        .build();
+        ResponseMetadata response;
+        var encoded = ResponseUtil.encodedResponseMetadata(expectedResponse);
+        response = ResponseUtil.decodeResponseMetadata(encoded);
+        assertEquals(expectedResponse, response);
+    }
+
+    @Test
+    public void testDecodeFailureOnInvalidBase64() {
+        var exception = assertThrows(IllegalArgumentException.class, () -> ResponseUtil.decodeResponseMetadata("*&*&"));
+        assertTrue(exception.getMessage().contains("Illegal base64 character"));
+    }
+
+    @Test
+    public void testDecodeFailureOnInvalidBytes() {
+        var exception = assertThrows(IllegalArgumentException.class, () -> ResponseUtil.decodeResponseMetadata("08983490832"));
+        assertTrue(exception.getMessage().contains("Encoded bytes are not a valid base64 representation of a ResponseMetadata"));
+    }
+
+    @Test
+    public void testDecodeEmptyArray() {
+        ResponseUtil.decodeResponseMetadata("");
+        assertEquals(ResponseMetadata.getDefaultInstance(), ResponseUtil.decodeResponseMetadata(""));
     }
 }

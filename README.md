@@ -360,7 +360,7 @@ This section describes structure of the experiment configuration json. The exper
 | 2.1.7.2 | idStart | These fields specifies a range of allocationIds. Requests associated with allocation Ids, that fall within this range are associated with this treatment. **It has to be between 0 and 4095 (inclusive).** *We use first 3 chars of the hexdecimal of the request id which is 16^3, as the allocation id.* |
 | 2.1.7.3 | idEnd | See above |
 | 2.1.7.4 | weight | [By Default] It is used when you use **TreatmentAllocatorOnRandom** in the **provideTreatmentAllocator**. Specifies the probability that one request is allocated to one group. |
-| 2.1.7.5 | learning | An integer flag to determine if the given treatment (traffic group) is used for learning purposes. Traffic allocated to a learning value of 1 should not be subject to filtering, while traffic allocated to a learning value of 0 is subject to filtering. We still expect Sellers to add extension fields in the bid-requests based on the model filtering evaluation. *See Section 2.2.5* |
+| 2.1.7.5 | learning | An integer flag to determine if the given treatment (traffic group) is used for learning purposes. Traffic allocated to a learning value of 1 should not be subject to filtering, while traffic allocated to a learning value of 0 is subject to filtering. We still expect Sellers to add extension fields in the bid-requests based on the model filtering evaluation or send encoded via header. *See Section 2.2.5* |
 | 3 | modelToExperiment | A map of models to experiments, to specify which experiment to use when making filtering decisions for a given model. |
 | 3.1 | [model-identifier] | The key in this map is the model identifier defined in the model configuration. *See Section 2.1.1.1* |
 
@@ -647,7 +647,9 @@ requestOutput := requestEvaluator.Evaluate(&evaluation.BidRequestEvaluatorInput{
 
 Once the Seller receives filtering recommendations from DTE evaluator library, Sellers are responsible for enforcing the decision on behalf of the Buyer to either filter or forward the bid request based on the value of `Response.slots[*].filterDecision`. If the `filterDecision` value is 0.0, DTE recommends the Seller filter the request, and if the value is 1.0, DTE recommends the Seller to forward the request.
 
-The Seller will also need to send the following custom extension fields:
+The Seller will also need to send the following custom extension fields either in JSON or via HTTP header:
+
+If adding ext to bid request JSON
 
 1. `slots[*].ext.amazontest.decision`: Recommended filter decision for the slot based on Buyer's signals.
     1. 0.0 = filter slot (low-value request)
@@ -656,9 +658,14 @@ The Seller will also need to send the following custom extension fields:
     1. 0 if request is in treatment, Seller evaluates request and filter/forward based on filter decision;
     2. 1 if request is in control, Seller evaluates request, but ALWAYS forward the request regardless of filter decision.
 
-These extensions are returned in the DTE Response object under the `Response.ext` and `Response.slots[*].ext` fields and can be appended as-is to the OpenRTB request forwarded to the Buyer.
+These extensions are returned in the DTE Response object under the `Response.getExt` and `Response.slots[*].getExt` fields and can be appended as-is to the OpenRTB request forwarded to the Buyer.
 
 Note that if the request is in control (learning=1), the `Response.slots[*].filterDecision` value will always be 1.0, regardless of the model result. If the request is in treatment (learning=0), the `Response.slots[*].filterDecision` value can be either 0.0 or 1.0, based on the model result.
+
+If sending via HTTP header, currently only available in Java implementation
+1. retrieve protobuf generated message from Response, `Response.getExtProto`
+2. Use this to generate a URI safe string using `ResponseUtil.encodedResponseMetadata`
+3. Send this string as value for HTTP Header named `XAmazonTest: <encoded string>`
 
 ## 2.4. DTE Failure Handling
 

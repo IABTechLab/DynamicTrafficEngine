@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+package com.amazon.demanddriventrafficevaluator.evaluation.evaluator;
+
+option java_multiple_files = true;
+option java_package = "com.amazon.demanddriventrafficevaluator.evaluation.evaluator.protobuf";
+option java_outer_classname = "ResponseProto";
+
+
+message SlotMetadata {
+  double decision = 1;
+}
+
+// Structured equivalent of Java Response: zero or more slots (List<Slot>) plus response-level ext.
+message ResponseMetadata {
+  int32 learning = 1;
+  repeated SlotMetadata slots = 2;
+}
