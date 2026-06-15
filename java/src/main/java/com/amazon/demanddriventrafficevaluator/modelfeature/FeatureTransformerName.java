@@ -13,7 +13,8 @@ public enum FeatureTransformerName {
     ConcatenateByPair,
     GetFirstNotEmpty,
     Exists,
-    IncludeDefaultValue;
+    IncludeDefaultValue,
+    DomainOrBundleKey;
 
     @JsonCreator
     public static FeatureTransformerName fromString(String value) {

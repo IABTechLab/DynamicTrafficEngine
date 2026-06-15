@@ -6,4 +6,5 @@ com.amazon.demanddriventrafficevaluator.modelfeature.transformer.ConcatenateByPa
 com.amazon.demanddriventrafficevaluator.modelfeature.transformer.Exists
 com.amazon.demanddriventrafficevaluator.modelfeature.transformer.GetFirstNotEmpty
 com.amazon.demanddriventrafficevaluator.modelfeature.transformer.IncludeDefaultValue
+com.amazon.demanddriventrafficevaluator.modelfeature.transformer.DomainOrBundleKey
 

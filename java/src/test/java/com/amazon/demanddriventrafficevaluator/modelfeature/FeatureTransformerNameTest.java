@@ -21,14 +21,15 @@ class FeatureTransformerNameTest {
 
     @Test
     void testEnumValues() {
-        assertEquals(5, FeatureTransformerName.values().length);
+        assertEquals(6, FeatureTransformerName.values().length);
         assertArrayEquals(
                 new FeatureTransformerName[]{
                         FeatureTransformerName.ApplyMappings,
                         FeatureTransformerName.ConcatenateByPair,
                         FeatureTransformerName.GetFirstNotEmpty,
                         FeatureTransformerName.Exists,
-                        FeatureTransformerName.IncludeDefaultValue
+                        FeatureTransformerName.IncludeDefaultValue,
+                        FeatureTransformerName.DomainOrBundleKey
                 },
                 FeatureTransformerName.values()
         );
@@ -64,7 +65,7 @@ class FeatureTransformerNameTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"ApplyMappings", "ConcatenateByPair", "GetFirstNotEmpty", "Exists", "IncludeDefaultValue"})
+    @ValueSource(strings = {"ApplyMappings", "ConcatenateByPair", "GetFirstNotEmpty", "Exists", "IncludeDefaultValue", "DomainOrBundleKey"})
     void testJsonDeserialization(String name) throws JsonProcessingException {
         FeatureTransformerName transformerName = objectMapper.readValue("\"" + name + "\"", FeatureTransformerName.class);
         assertEquals(FeatureTransformerName.valueOf(name), transformerName);
