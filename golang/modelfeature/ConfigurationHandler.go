@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,6 +59,10 @@ func (t *ConfigurationHandler[T]) Load() (bool, error) {
 		if s3Error != nil {
 			return false, fmt.Errorf("error fetching s3 file: %v", s3Error)
 		}
+		defer func() {
+			_, _ = io.Copy(io.Discard, getObjectOutput.Body)
+			_ = getObjectOutput.Body.Close()
+		}()
 		if !t.localCacheFactory.ShouldRefresh(t.fileIdentifierCacheKey, *getObjectOutput.ETag) {
 			Logger.Info().Msgf("Skipping refresh for %s", filename)
 			return false, nil
@@ -71,13 +76,15 @@ func (t *ConfigurationHandler[T]) Load() (bool, error) {
 		if localErr != nil {
 			return false, fmt.Errorf("error opening file: %v", localErr)
 		}
+		defer func() {
+			_ = filePointer.Close()
+		}()
 		if !t.localCacheFactory.ShouldRefreshLocal(t.fileIdentifierCacheKey, filePointer) {
 			Logger.Info().Msgf("Skipping refresh for %s", filename)
 			return false, nil
 		}
 
 		jsonData, err = t.daoFactory.GetDataFromLocal(filePointer)
-		_ = filePointer.Close()
 	}
 
 	if err != nil {
