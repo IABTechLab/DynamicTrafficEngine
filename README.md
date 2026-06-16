@@ -43,6 +43,13 @@ For integration support, contact your buyer's integration team. If you are imple
 
 ## 1.5. Version History
 
+**2.4 [2026/06/01]**
+
+1. Updated possible locations of model outputs. ***(2.1. DTE Cloud)***
+2. Added `modelFormat` and `s3PathMode` to model configuration. ***(2.1.1.1. Model Configuration)***
+3. Added `featureExtractorType` and supporting fields to experiment configuration. ***(2.1.1.2. Experiment Configuration)***
+4. Added description of Bloom Filter model output. ***(2.1.2. Signal Output File)***
+
 **2.3 [2026/02/05]**
 
 1. Updated to generalized language. ***(All sections)***
@@ -121,8 +128,9 @@ The following data files will be provided in the cloud bucket:
     1. s3://experiment-traffic-shaping-us-east-1/test_seller/configuration/model/config.json
 3. Experiment Configuration file: `{storage_path}/{seller_name}/configuration/experiment/config.json`
     1. s3://experiment-traffic-shaping-us-east-1/test_seller/configuration/experiment/config.json
-3. Signal Output files: `{storage_path}/{seller_name}/{yyyy}-{mm}-{dd}/{hh}/{model_identifier_name}`
+3. Signal Output files: `{storage_path}/{seller_name}/{yyyy}-{mm}-{dd}/{hh}/{model_identifier_name}` (Dynamic output paths) OR `{storage_path}/{seller_name}/models/{model_identifier_name}` (Static output paths)
     1. s3://experiment-traffic-shaping-us-east-1/test_seller/2025-01-14/04/buyer_low-value_v1.csv
+    2. s3://experiment-traffic-shaping-us-east-1/test_seller/models/buyer_low-value_v2.csv
 
 ### 2.1.1. Configuration (or Config) File
 
@@ -147,13 +155,15 @@ This section describes structure of the model configuration json.
 | 2.1.3 | name | Name of the signal. Unlike the "identifier", this field does not have any version information in the value. |
 | 2.1.4 | version | Version of the signal. |
 | 2.1.5 | modelType | Type of the model, which determines if the tuple outputs identify high or low value supply. One of "HighValue" or "LowValue". "HighValue" models will evaluate requests as low value if no tuple matches, while "LowValue" models will evaluate requests as high value if no tuple matches. |
-| 2.1.6 | featureExtractionType | Specifies how the feature extraction is defined. Currently we support only "JsonExtractor", so the json paths are provided in the config to specify how to extract the features from an OpenRTB request in JSON format. |
-| 2.1.7 | features | Provides an ordered list of features, and information on how to extract and transform each of those features. |
-| 2.1.7.1 | name | Name of the feature |
-| 2.1.7.2 | fields | An ordered list of one of more json paths in the OpenRTB request from where the values have to be extracted. |
-| 2.1.7.3 | transformation | An ordered list of transformations that must be applied on the values extracted. Currently we have (1) Exists, (2) ConcatenateByPair, (3) GetFirstNonEmpty, (4) IncludeDefaultValue, and (5) ApplyMappings as the named transformations, A reference implementation for each of these transformations is provided in the library. |
-| 2.1.7.4 | mapping | *[Optional]* A mapping provided to help with the 'ApplyMappings' transformation. |
-| 2.1.7.5 | mappingDefaultValue | *[Optional]* A mapping provided to help with the 'ApplyMappings' transformation. Use this value when the extracted value cannot be mapped using the 'mapping' field. |
+| 2.1.6 | modelFormat | Format of the model, which represents how the model file should be interpreted. One of "RULE_BASED" or "BLOOM_FILTER", default is "RULE_BASED".
+| 2.1.7 | s3PathMode | Where the model outputs are loacted. One of "DYNAMIC" or "STATIC", default is "DYNAMIC". "DYNAMIC" models are written to unique paths, based on the day and hour of the model (i.e. `{storage_path}/{seller_name}/{yyyy}-{mm}-{dd}/{hh}/{model_identifier_name}`), while "STATIC" models are written to the same path (i.e. `{storage_path}/{seller_name}/models/{model_identifier_name}`), overwriting the last version of the model output with the current output.
+| 2.1.8 | featureExtractionType | Specifies how the feature extraction is defined. Currently we support only "JsonExtractor", so the json paths are provided in the config to specify how to extract the features from an OpenRTB request in JSON format. |
+| 2.1.9 | features | Provides an ordered list of features, and information on how to extract and transform each of those features. |
+| 2.1.9.1 | name | Name of the feature |
+| 2.1.9.2 | fields | An ordered list of one of more json paths in the OpenRTB request from where the values have to be extracted. |
+| 2.1.9.3 | transformation | An ordered list of transformations that must be applied on the values extracted. Currently we have (1) Exists, (2) ConcatenateByPair, (3) GetFirstNonEmpty, (4) IncludeDefaultValue, and (5) ApplyMappings as the named transformations, A reference implementation for each of these transformations is provided in the library. |
+| 2.1.9.4 | mapping | *[Optional]* A mapping provided to help with the 'ApplyMappings' transformation. |
+| 2.1.9.5 | mappingDefaultValue | *[Optional]* A mapping provided to help with the 'ApplyMappings' transformation. Use this value when the extracted value cannot be mapped using the 'mapping' field. |
 
 *Example:*
 
@@ -335,6 +345,68 @@ This section describes structure of the model configuration json.
           "mappingDefaultValue": "ALL"
         }
       ]
+    },
+    "buyer_inv_v1": {
+      "identifier": "buyer_inv_v1",
+      "dsp": "buyer",
+      "name": "inv",
+      "version": "v1",
+      "modelType": "LowValue",
+      "modelFormat": "BLOOM_FILTER",
+      "s3PathMode": "STATIC",
+      "featureExtractorType": "JsonExtractor",
+      "features": [
+        {
+          "name": "isMobile",
+          "fields": [
+            "$.app"
+          ],
+          "transformation": [
+            "Exists",
+            "ApplyMappings"
+          ],
+          "mapping": {
+            "0": "web",
+            "1": "app"
+          },
+          "mappingDefaultValue": null
+        },
+        {
+          "name": "isVideo",
+          "fields": [
+            "$.imp[0].video"
+          ],
+          "transformation": [
+            "Exists",
+            "ApplyMappings"
+          ],
+          "mapping": {
+            "0": "banner",
+            "1": "video"
+          },
+          "mappingDefaultValue": null
+        },
+        {
+          "name": "publisherId",
+          "fields": [
+            "$.site.publisher.id",
+            "$.app.publisher.id"
+          ],
+          "transformation": [
+            "GetFirstNotEmpty"
+          ]
+        },
+        {
+          "name": "siteOrBundle",
+          "fields": [
+            "$.site.domain",
+            "$.app.bundle"
+          ],
+          "transformation": [
+            "GetFirstNotEmpty"
+          ]
+        }
+      ]
     }
   }
 }
@@ -351,16 +423,20 @@ This section describes structure of the experiment configuration json. The exper
 | 2.1 | *[identifier-name]* | Name of the experiment. Note that value of this key is different for each experiment. |
 | 2.1.1 | name | Name of the experiment. This will be same as the parent key. |
 | 2.1.2 | type | Type of the experiment. Currently only the type "soft-filter" is supported. |
-| 2.1.3 | startTimeUTC | Specifies the time on when to start using this experiment. The value is provided as UTC epoch milli-seconds. |
-| 2.1.4 | endTimeUTC | Specifies the time on when to stop using this experiment. The value is provided as UTC epoch milli-seconds. |
-| 2.1.5 | allocationIdStart | It is used when you use **TreatmentAllocatorOnHash** in the **provideTreatmentAllocator** and provide the request id in the input. Specifies the start and end integers for allocation ids. These allocation ids are split between the treatment groups to in turn split the requests. Sellers are expected to implement (*reference code avalable in library*) logic that randomly assigns an allocationId (integer) to each request that can be evaluated by the model. **It has to be between 0 and 4095 (inclusive).** *We use first 3 chars of the hexdecimal of the request id which is 16^3, as the allocation id.* |
-| 2.1.6 | allocationIdEnd | See above |
-| 2.1.7 | treatments | Provides an ordered list of treatments (traffic groups), and how to allocate traffic between these groups. |
-| 2.1.7.1 | treatmentCode | Name of the treatment |
-| 2.1.7.2 | idStart | These fields specifies a range of allocationIds. Requests associated with allocation Ids, that fall within this range are associated with this treatment. **It has to be between 0 and 4095 (inclusive).** *We use first 3 chars of the hexdecimal of the request id which is 16^3, as the allocation id.* |
-| 2.1.7.3 | idEnd | See above |
-| 2.1.7.4 | weight | [By Default] It is used when you use **TreatmentAllocatorOnRandom** in the **provideTreatmentAllocator**. Specifies the probability that one request is allocated to one group. |
-| 2.1.7.5 | learning | An integer flag to determine if the given treatment (traffic group) is used for learning purposes. Traffic allocated to a learning value of 1 should not be subject to filtering, while traffic allocated to a learning value of 0 is subject to filtering. We still expect Sellers to add extension fields in the bid-requests based on the model filtering evaluation. *See Section 2.2.5* |
+| 2.1.3 | aggregationSchema | Aggregation of model results. Determines how the results of each model should be combined with each other to give a single filter recommendation. If not specified, defaults to the most conservative decision.
+| 2.1.3.1 | operator | How to combine one or more model results. One of "AND" or "OR". "AND" specifies that all models must return a "filter" decision to resolve to an overall "filter" decision, while "OR" specifies that any model that returns a "filter" decision will resolve to an overall "filter" decision.
+| 2.1.3.2 | conditions | List of recursive-supported operands. The list can be either model identifers, or a nested object of an operator and conditions.
+| 2.1.3.3 | [model-identifier] | The model identifier defined in the model configuration. *See Section 2.1.1.1*
+| 2.1.4 | startTimeUTC | Specifies the time on when to start using this experiment. The value is provided as UTC epoch milli-seconds. |
+| 2.1.5 | endTimeUTC | Specifies the time on when to stop using this experiment. The value is provided as UTC epoch milli-seconds. |
+| 2.1.6 | allocationIdStart | It is used when you use **TreatmentAllocatorOnHash** in the **provideTreatmentAllocator** and provide the request id in the input. Specifies the start and end integers for allocation ids. These allocation ids are split between the treatment groups to in turn split the requests. Sellers are expected to implement (*reference code avalable in library*) logic that randomly assigns an allocationId (integer) to each request that can be evaluated by the model. **It has to be between 0 and 4095 (inclusive).** *We use first 3 chars of the hexdecimal of the request id which is 16^3, as the allocation id.* |
+| 2.1.7 | allocationIdEnd | See above |
+| 2.1.8 | treatments | Provides an ordered list of treatments (traffic groups), and how to allocate traffic between these groups. |
+| 2.1.8.1 | treatmentCode | Name of the treatment |
+| 2.1.8.2 | idStart | These fields specifies a range of allocationIds. Requests associated with allocation Ids, that fall within this range are associated with this treatment. **It has to be between 0 and 4095 (inclusive).** *We use first 3 chars of the hexdecimal of the request id which is 16^3, as the allocation id.* |
+| 2.1.8.3 | idEnd | See above |
+| 2.1.8.4 | weight | [By Default] It is used when you use **TreatmentAllocatorOnRandom** in the **provideTreatmentAllocator**. Specifies the probability that one request is allocated to one group. |
+| 2.1.8.5 | learning | An integer flag to determine if the given treatment (traffic group) is used for learning purposes. Traffic allocated to a learning value of 1 should not be subject to filtering, while traffic allocated to a learning value of 0 is subject to filtering. We still expect Sellers to add extension fields in the bid-requests based on the model filtering evaluation. *See Section 2.2.5* |
 | 3 | modelToExperiment | A map of models to experiments, to specify which experiment to use when making filtering decisions for a given model. |
 | 3.1 | [model-identifier] | The key in this map is the model identifier defined in the model configuration. *See Section 2.1.1.1* |
 
@@ -368,38 +444,53 @@ This section describes structure of the experiment configuration json. The exper
 
 ```json
 {
-    "type": "ExperimentConfiguration",
-    "experimentDefinitionByName": {
-        "DynamicTrafficEngineSoftFilter": {
-            "name": "DynamicTrafficEngineSoftFilter",
-            "type": "soft-filter",
-            "treatments": [
-                {
-                    "treatmentCode": "T",
-                    "idStart": "0",
-                    "idEnd": "3276",
-                    "weight": 80,
-                    "learning": 0
-                },
-                {
-                    "treatmentCode": "C",
-                    "idStart": "3277",
-                    "idEnd": "4095",
-                    "weight": 20,
-                    "learning": 1
-                }
-            ],
-            "startTimeUTC": 1654498800000,
-            "endTimeUTC": 1727334000000,
-            "allocationIdStart": "0",
-            "allocationIdEnd": "4095",
+  "type": "ExperimentConfiguration",
+  "experimentDefinitionByName": {
+    "DemandDrivenTrafficEvaluatorSoftFilter": {
+      "name": "DemandDrivenTrafficEvaluatorSoftFilter",
+      "type": "soft-filter",
+      "aggregationSchema": {
+        "operator": "AND",
+        "conditions": [
+          {
+            "operator": "OR",
+              "conditions": [
+                { "modelIdentifier": "buyer_low-value_v2" },
+                { "modelIdentifier": "buyer_inv_v1" }
+              ]
+          },
+          { "modelIdentifier": "buyer_high-priority-deals_v1" }
+        ]
+      },
+      "treatments": [
+        {
+          "treatmentCode": "T",
+          "idStart": "0",
+          "idEnd": "3276",
+          "weight": 80
+        },
+        {
+          "treatmentCode": "C",
+          "idStart": "3277",
+          "idEnd": "4095",
+          "weight": 20
         }
-    },
-    "modelToExperiment": {
-        "buyer_low-value_v2": "DynamicTrafficEngineSoftFilter",
-        "buyer_high-priority-deals_v1": "DemandDrivenTrafficEvaluatorSoftFilter"
+      ],
+      "salt": "edf2e9cbdd2d1134",
+      "startTimeUTC": 1654498800000,
+      "endTimeUTC": 4102358400000,
+      "allocationIdStart": "0",
+      "allocationIdEnd": "4095",
+      "hash": true
     }
+  },
+  "modelToExperiment": {
+    "buyer_low-value_v2": "DemandDrivenTrafficEvaluatorSoftFilter",
+    "buyer_inv_v1": "DemandDrivenTrafficEvaluatorSoftFilter",
+    "buyer_high-priority-deals_v1": "DemandDrivenTrafficEvaluatorSoftFilter"
+  }
 }
+
 ```
 
 ### 2.1.2. Signal Output File
@@ -436,6 +527,10 @@ deal123|DISPLAY|MOBILE|USA
 deal456|VIDEO|DESKTOP|ALL
 deal789|VIDEO|CONNECTEDTV|CAN
 ```
+
+**Example - Bloom Filter Model**
+
+This would be a .bloom byte file, that is serialized and deserialized using the Google Guava Bloom Filter library.
 
 ### 2.1.3. RPMA Threshold Sharing - Monetization Insights
 
@@ -647,7 +742,9 @@ requestOutput := requestEvaluator.Evaluate(&evaluation.BidRequestEvaluatorInput{
 
 Once the Seller receives filtering recommendations from DTE evaluator library, Sellers are responsible for enforcing the decision on behalf of the Buyer to either filter or forward the bid request based on the value of `Response.slots[*].filterDecision`. If the `filterDecision` value is 0.0, DTE recommends the Seller filter the request, and if the value is 1.0, DTE recommends the Seller to forward the request.
 
-The Seller will also need to send the following custom extension fields:
+The Seller will also need to send the following custom extension fields either in JSON or via HTTP header:
+
+If adding ext to bid request JSON
 
 1. `slots[*].ext.amazontest.decision`: Recommended filter decision for the slot based on Buyer's signals.
     1. 0.0 = filter slot (low-value request)
@@ -656,9 +753,14 @@ The Seller will also need to send the following custom extension fields:
     1. 0 if request is in treatment, Seller evaluates request and filter/forward based on filter decision;
     2. 1 if request is in control, Seller evaluates request, but ALWAYS forward the request regardless of filter decision.
 
-These extensions are returned in the DTE Response object under the `Response.ext` and `Response.slots[*].ext` fields and can be appended as-is to the OpenRTB request forwarded to the Buyer.
+These extensions are returned in the DTE Response object under the `Response.getExt` and `Response.slots[*].getExt` fields and can be appended as-is to the OpenRTB request forwarded to the Buyer.
 
 Note that if the request is in control (learning=1), the `Response.slots[*].filterDecision` value will always be 1.0, regardless of the model result. If the request is in treatment (learning=0), the `Response.slots[*].filterDecision` value can be either 0.0 or 1.0, based on the model result.
+
+If sending via HTTP header, currently only available in Java implementation
+1. retrieve protobuf generated message from Response, `Response.getExtProto`
+2. Use this to generate a URI safe string using `ResponseUtil.encodedResponseMetadata`
+3. Send this string as value for HTTP Header named `XAmazonTest: <encoded string>`
 
 ## 2.4. DTE Failure Handling
 
@@ -888,7 +990,7 @@ Please refer to Appendix-1 [*B. IAM Role Setup for uploading reports*] for how t
 
 See the following section (Requested Metrics and Definitions) for the complete set of requests metrics to report.
 
-| Date | Delivery Channel + Format | Total Bid Requests Sent to Amazon | Total Spend ($) | Total Impressions | Bid Request Volume (T) | Bid Request Volume (C) | Requests Filtered by DTE Volume | DTE filter rate (%) | Spend per million ad reqeusts ($) | Fill Rate (%) | Fill Rate (T) | Fill Rate (C) | Spend per million ad reqeusts (T) | Spend per million ad reqeusts (C) | Bid Rate (T) | Bid Rate (C) |
+| Date | Delivery Channel + Format | Total Bid Requests Sent to Amazon | Total Spend ($) | Total Impressions | Bid Request Volume (T) | Bid Request Volume (C) | Requests Filtered by DTE Volume | DTE Filter Rate (%) | Spend per Million Ad Requests ($) | Fill Rate (%) | Fill Rate (T) | Fill Rate (C) | Spend per Million Ad Requests (T) | Spend per Million Ad Requests (C) | Bid Rate (T) | Bid Rate (C) |
 |------|---------------------------|-----------------------------------|-----------------|-------------------|------------------------|------------------------|--------------------------------|---------------------|-----------------------------------|---------------|---------------|---------------|-----------------------------------|-----------------------------------|--------------|--------------|
 | 2020-03-20 | Overall |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | 2020-03-20 | Site Banner |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
@@ -964,4 +1066,3 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This project is licensed under the Apache-2.0 License.
-
