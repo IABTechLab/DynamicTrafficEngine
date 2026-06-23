@@ -50,6 +50,7 @@ type RequestEvaluator struct {
 	trafficAllocator          interfaces.TrafficAllocatorInterface
 	modelEvaluator            interfaces.ModelEvaluator
 	modelConfigurationHandler interfaces.ModelConfigurationHandlerInterface
+	configurableAggregator    *ConfigurableAggregator
 }
 
 // Input to RequestEvaluator. At least one of OpenRtbRequest and OpenRtbRequestMap must be present.
@@ -59,9 +60,9 @@ type BidRequestEvaluatorInput struct {
 	// Raw OpenRTB request, in JSON format.
 	OpenRtbRequest string
 
-	// Abridged OpenRTB request, as a Map of string -> string. The keys are the path of the field,
-	// in dot notation described in JsonPath, and the values are the the string value of the field.
-	OpenRtbRequestMap map[string]string
+	// Abridged OpenRTB request, as a Map of string -> []string. The keys are the path of the field,
+	// in dot notation described in JsonPath, and the values are string slices of the field values.
+	OpenRtbRequestMap map[string][]string
 }
 
 // Output of Request Evaluator. Provides overall filter recommendation, as well as extensions to be
@@ -95,12 +96,13 @@ type Slot struct {
 	Ext string
 }
 
-func NewRequestEvaluator(sspIdentifier string, trafficAllocator interfaces.TrafficAllocatorInterface, modelEvaluator interfaces.ModelEvaluator, modelConfigurationHandler interfaces.ModelConfigurationHandlerInterface) *RequestEvaluator {
+func NewRequestEvaluator(sspIdentifier string, trafficAllocator interfaces.TrafficAllocatorInterface, modelEvaluator interfaces.ModelEvaluator, modelConfigurationHandler interfaces.ModelConfigurationHandlerInterface, configurableAggregator *ConfigurableAggregator) *RequestEvaluator {
 	return &RequestEvaluator{
 		sspIdentifier:             sspIdentifier,
 		trafficAllocator:          trafficAllocator,
 		modelEvaluator:            modelEvaluator,
 		modelConfigurationHandler: modelConfigurationHandler,
+		configurableAggregator:    configurableAggregator,
 	}
 }
 
@@ -138,7 +140,7 @@ func (b *RequestEvaluator) Evaluate(requestInput *BidRequestEvaluatorInput) (out
 	context.TrafficAllocationContext = trafficAllocationContext
 
 	externalFields := []string{"$.id"}
-	var requestFieldValueMap map[string]string
+	var requestFieldValueMap map[string][]string
 	var err error
 	if openRtbRequest != "" {
 		Logger.Debug().Msgf("Using raw OpenRtbRequest string")
@@ -198,7 +200,20 @@ func (b *RequestEvaluator) Evaluate(requestInput *BidRequestEvaluatorInput) (out
 		}
 	}
 	context.ModelEvaluatorOutputs = modelEvaluatorOutputs
-	aggregatedModelEvaluationResult, err := b.aggregateModelEvaluationResultsOnMax(context)
+	// Check if a configurable aggregation schema is defined for the experiment
+	experimentDef, expErr := trafficAllocationContext.GetExperimentDefinitionByType(modelfeature.ExperimentTypeSoftFilter)
+	if expErr != nil {
+		Logger.Error().Msgf("fail to get experiment definition due to %+v\n return the default response", expErr)
+		return &BidRequestEvaluatorOutput{
+			Response: DefaultResponse,
+		}
+	}
+	var aggregatedModelEvaluationResult *interfaces.AggregatedModelEvaluationResult
+	if experimentDef.AggregationSchema != nil && b.configurableAggregator != nil {
+		aggregatedModelEvaluationResult, err = b.configurableAggregator.Aggregate(experimentDef.AggregationSchema, modelEvaluatorOutputs, context)
+	} else {
+		aggregatedModelEvaluationResult, err = b.aggregateModelEvaluationResultsOnMax(context)
+	}
 	if err != nil {
 		Logger.Error().Msgf("fail to aggregate model evaluation results due to %+v\n return the default response", err)
 		return &BidRequestEvaluatorOutput{
@@ -212,29 +227,32 @@ func (b *RequestEvaluator) Evaluate(requestInput *BidRequestEvaluatorInput) (out
 	return output
 }
 
-func (b *RequestEvaluator) setupOpenRtbRequestID(context *interfaces.Context, requestFieldValueMap map[string]string) {
-	requestID, exists := requestFieldValueMap["$.id"]
-	if !exists {
+func (b *RequestEvaluator) setupOpenRtbRequestID(context *interfaces.Context, requestFieldValueMap map[string][]string) {
+	values, exists := requestFieldValueMap["$.id"]
+	var requestID string
+	if !exists || len(values) == 0 {
 		Logger.Debug().Msgf("Could not find id from OpenRtbRequest and use self generated UUID instead.")
 		context.AddDebug("Could not find id from OpenRtbRequest and use self generated UUID instead.")
 		requestID = "unknown"
+	} else {
+		requestID = values[0]
 	}
 	context.OpenRtbRequestId = requestID
 }
 
-func (b *RequestEvaluator) addMissingEntriesToMap(openRtbRequestMap map[string]string) (map[string]string, error) {
+func (b *RequestEvaluator) addMissingEntriesToMap(openRtbRequestMap map[string][]string) (map[string][]string, error) {
 	uniqueFeatureFields, err := b.modelConfigurationHandler.GetAllUniqueFeatureFields()
 	if err != nil {
 		return nil, fmt.Errorf("fail to augment openRtbRequestMap due to %v", err)
 	}
 	Logger.Debug().Msgf("uniqueFeatureFields: %v", uniqueFeatureFields)
-	var fieldValueMap = make(map[string]string)
+	var fieldValueMap = make(map[string][]string)
 	for _, field := range uniqueFeatureFields {
 		value, exists := openRtbRequestMap[field]
-		if exists {
+		if exists && value != nil {
 			fieldValueMap[field] = value
 		} else {
-			fieldValueMap[field] = ""
+			fieldValueMap[field] = []string{}
 			Logger.Debug().Msgf("field [%v] is not found", field)
 		}
 	}
@@ -242,36 +260,157 @@ func (b *RequestEvaluator) addMissingEntriesToMap(openRtbRequestMap map[string]s
 }
 
 // Extract values of all unique fields of all model features.
-func (b *RequestEvaluator) parse(openRtbRequest string, externalFields []string) (map[string]string, error) {
+func (b *RequestEvaluator) parse(openRtbRequest string, externalFields []string) (map[string][]string, error) {
 	uniqueFeatureFields, err := b.modelConfigurationHandler.GetAllUniqueFeatureFields()
 	if err != nil {
 		return nil, fmt.Errorf("fail to extract openRtbRequest due to %v", err)
 	}
 	uniqueFeatureFields = append(uniqueFeatureFields, externalFields...)
 	Logger.Debug().Msgf("uniqueFeatureFields: %v", uniqueFeatureFields)
-	var fieldValueMap = make(map[string]string)
-	paths := convertFieldsToPaths(uniqueFeatureFields)
-	Logger.Debug().Msgf("paths: %v", paths)
-	jsonparser.EachKey([]byte(openRtbRequest), func(idx int, value []byte, vt jsonparser.ValueType, err error) {
-		var str string
-		switch vt {
-		case jsonparser.String:
-			str = string(value)
-		default:
-			str = string(value)
+
+	// Separate wildcard fields (containing [*]) from scalar fields
+	var scalarFields []string
+	var wildcardFields []string
+	for _, field := range uniqueFeatureFields {
+		if strings.Contains(field, "[*]") {
+			wildcardFields = append(wildcardFields, field)
+		} else {
+			scalarFields = append(scalarFields, field)
 		}
-		fieldValueMap[convertPathsToField(paths[idx])] = str
-	}, paths...)
+	}
+
+	var fieldValueMap = make(map[string][]string)
+
+	// Process scalar fields using existing EachKey() approach
+	if len(scalarFields) > 0 {
+		paths := convertFieldsToPaths(scalarFields)
+		Logger.Debug().Msgf("paths: %v", paths)
+		jsonparser.EachKey([]byte(openRtbRequest), func(idx int, value []byte, vt jsonparser.ValueType, err error) {
+			var str string
+			switch vt {
+			case jsonparser.String:
+				str = string(value)
+			default:
+				str = string(value)
+			}
+			fieldValueMap[convertPathsToField(paths[idx])] = []string{str}
+		}, paths...)
+	}
+
+	// Process wildcard fields using extractWildcardField
+	jsonData := []byte(openRtbRequest)
+	for _, field := range wildcardFields {
+		fieldValueMap[field] = b.extractWildcardField(jsonData, field)
+	}
+
 	Logger.Debug().Msgf("fieldValueMap: %v", fieldValueMap)
 	// Required as JSON Parser forEach doesn't call the iterator function for non-existing keys in JSON
 	for _, field := range uniqueFeatureFields {
 		_, exists := fieldValueMap[field]
 		if !exists {
-			fieldValueMap[field] = ""
+			fieldValueMap[field] = []string{}
 			Logger.Debug().Msgf("field [%v] is not found", field)
 		}
 	}
 	return fieldValueMap, nil
+}
+
+// extractWildcardField extracts multiple values from a JSON array path containing [*].
+// It splits the path at [*], navigates to the parent array, iterates each element,
+// and extracts the suffix field from each element.
+func (b *RequestEvaluator) extractWildcardField(jsonData []byte, fieldPath string) []string {
+	// Split the field path at [*]
+	parts := strings.SplitN(fieldPath, "[*]", 2)
+	if len(parts) != 2 {
+		return []string{}
+	}
+
+	prefix := parts[0] // e.g., "$.imp[0].pmp.deals"
+	suffix := parts[1] // e.g., ".id"
+
+	// Remove leading "." from suffix if present
+	suffix = strings.TrimPrefix(suffix, ".")
+
+	// Convert prefix to jsonparser path segments
+	// Remove "$." prefix
+	prefix = strings.TrimPrefix(prefix, "$.")
+
+	// Parse the prefix path into segments compatible with jsonparser.Get()
+	prefixSegments := parsePathSegments(prefix)
+
+	// Navigate to the parent array using jsonparser.Get()
+	arrayData, dataType, _, err := jsonparser.Get(jsonData, prefixSegments...)
+	if err != nil || dataType != jsonparser.Array {
+		Logger.Debug().Msgf("wildcard field [%v] prefix path does not resolve to an array: %v", fieldPath, err)
+		return []string{}
+	}
+
+	// Iterate the array and extract suffix field from each element
+	var values []string
+	suffixSegments := parsePathSegments(suffix)
+
+	jsonparser.ArrayEach(arrayData, func(elementValue []byte, dataType jsonparser.ValueType, offset int, err error) {
+		if err != nil {
+			return
+		}
+		if len(suffixSegments) == 0 {
+			// No suffix - use the element value directly
+			values = append(values, string(elementValue))
+			return
+		}
+		// Extract the suffix field from the array element
+		val, valType, _, getErr := jsonparser.Get(elementValue, suffixSegments...)
+		if getErr != nil {
+			return
+		}
+		switch valType {
+		case jsonparser.String:
+			values = append(values, string(val))
+		case jsonparser.NotExist:
+			// Skip non-existing fields
+		default:
+			values = append(values, string(val))
+		}
+	})
+
+	return values
+}
+
+// parsePathSegments converts a dot-notation path string into jsonparser-compatible path segments.
+// Handles bracket notation: "imp[0].pmp.deals" → ["imp", "[0]", "pmp", "deals"]
+func parsePathSegments(path string) []string {
+	if path == "" {
+		return []string{}
+	}
+	// Split on "." but handle bracket notation
+	rawParts := strings.Split(path, ".")
+	var segments []string
+	for _, part := range rawParts {
+		if part == "" {
+			continue
+		}
+		// Check if part contains bracket notation like "imp[0]"
+		if bracketIdx := strings.Index(part, "["); bracketIdx >= 0 {
+			// Split into name and bracket parts
+			name := part[:bracketIdx]
+			rest := part[bracketIdx:]
+			if name != "" {
+				segments = append(segments, name)
+			}
+			// Parse bracket indices - e.g., "[0]" or "[0][1]"
+			for len(rest) > 0 {
+				closeIdx := strings.Index(rest, "]")
+				if closeIdx < 0 {
+					break
+				}
+				segments = append(segments, rest[:closeIdx+1])
+				rest = rest[closeIdx+1:]
+			}
+		} else {
+			segments = append(segments, part)
+		}
+	}
+	return segments
 }
 
 func (b *RequestEvaluator) getModelDefinitions(context *interfaces.Context) ([]interfaces.ModelDefinition, error) {

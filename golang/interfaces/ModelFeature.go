@@ -95,6 +95,36 @@ type ExperimentConfiguration struct {
 type ModelResult struct {
 	Value float32
 	Key   string
+
+	// All permutation keys that were looked up, in order.
+	Keys []string
+
+	// Parallel array to Keys. Values[i] = cached value for Keys[i], or defaultValue on miss.
+	Values []float32
+}
+
+// Aggregation operator constants for AggregationNode tree evaluation.
+const (
+	AggregationOperatorAND = "AND"
+	AggregationOperatorOR  = "OR"
+)
+
+// AggregationNode represents a node in the aggregation schema tree.
+// Branch nodes have an Operator and Conditions; leaf nodes have a ModelIdentifier.
+type AggregationNode struct {
+	// Operator is "AND" or "OR" for branch nodes, empty for leaf nodes.
+	Operator string `json:"operator,omitempty"`
+
+	// Conditions is the list of child nodes for branch nodes.
+	Conditions []AggregationNode `json:"conditions,omitempty"`
+
+	// ModelIdentifier references a model for leaf nodes.
+	ModelIdentifier string `json:"modelIdentifier,omitempty"`
+}
+
+// IsLeaf returns true if this node is a leaf (references a model, has no operator).
+func (n *AggregationNode) IsLeaf() bool {
+	return n.Operator == "" && n.ModelIdentifier != ""
 }
 
 // ExperimentDefinition represents a single experiment definition
@@ -113,7 +143,23 @@ type ExperimentDefinition struct {
 
 	// Specifies the time on when to stop using this experiment. The value is provided as UTC epoch milli-seconds.
 	EndTimeUTC int64 `json:"endTimeUTC"`
+
+	// AggregationSchema defines the AND/OR tree for combining model results.
+	// nil indicates no schema is configured and triggers max-aggregation fallback behavior.
+	AggregationSchema *AggregationNode `json:"aggregationSchema,omitempty"`
 }
+
+// ModelFormat constants determine the loader and evaluator type for a model.
+const (
+	ModelFormatRuleBased   = "RULE_BASED"
+	ModelFormatBloomFilter = "BLOOM_FILTER"
+)
+
+// S3PathMode constants determine how S3 object paths are resolved for model loading.
+const (
+	S3PathModeDynamic = "DYNAMIC"
+	S3PathModeStatic  = "STATIC"
+)
 
 type ModelDefinition struct {
 	// Unique identifier for the model <dsp>_<name>_<version>
@@ -128,8 +174,18 @@ type ModelDefinition struct {
 	// Version of the signal.
 	Version string `json:"version"`
 
-	// Type of the model. Currently only "low value signal" is supported, and is not configurable.
-	Type ModelType `json:"type"`
+	// Type of the model. Supports "LowValue" and "HighValue" model types.
+	Type ModelType `json:"modelType"`
+
+	// ModelFormat determines the loader and evaluator type.
+	// Valid values: "RULE_BASED", "BLOOM_FILTER". Defaults to "RULE_BASED" if empty.
+	ModelFormat string `json:"modelFormat"`
+
+	// S3PathMode determines how S3 object paths are resolved.
+	// "DYNAMIC": {ssp}/{date}/{hour}/{s3ObjectKey}
+	// "STATIC": literal s3ObjectKey value
+	// Defaults to "DYNAMIC" if empty.
+	S3PathMode string `json:"s3PathMode"`
 
 	// Specifies how the feature extraction is defined. Currently only "JsonExtractor" is supported,
 	// so the json paths are provided in the config to specify how to extract the features from an

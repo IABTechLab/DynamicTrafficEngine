@@ -69,7 +69,7 @@ func (suite *InitializerTestSuite) TestNewTaskInitializer() {
 	initializer := NewTaskInitializer("testSupplier", dummyCredentialsProvider, "us-east-1", "test/folder", 1000)
 	assert.NotNil(suite.T(), initializer)
 	assert.Len(suite.T(), initializer.StageOneTasks, 2)
-	assert.Len(suite.T(), initializer.StageTwoTasks, 1)
+	assert.Len(suite.T(), initializer.StageTwoTasks, 2)
 }
 
 func (suite *InitializerTestSuite) TestNewRequestEvaluator() {

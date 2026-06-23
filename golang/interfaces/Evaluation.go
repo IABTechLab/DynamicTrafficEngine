@@ -30,6 +30,10 @@ type ModelResultHandlerInterface interface {
 
 	// Generates the string tuple, given the individual feature values. Features are delimited by "|".
 	BuildKey(modelFeatures []ModelFeature) string
+
+	// Generates all permutation keys from multi-valued features.
+	// Returns the Cartesian product of all feature value lists, joined by "|", capped at 100.
+	BuildKeys(modelFeatures []ModelFeature) []string
 }
 
 // Context contains metadata regarding the evaluation of a given OpenRTB request.
@@ -102,7 +106,7 @@ type ModelEvaluatorInput struct {
 	ModelDefinition *ModelDefinition
 
 	// Map of OpenRTB paths and their raw values.
-	FeatureFieldValueMap map[string]string
+	FeatureFieldValueMap map[string][]string
 }
 
 type ModelEvaluationStatus string
