@@ -170,9 +170,9 @@ public class BidRequestEvaluatorWithBloomFilterTest extends BaseTestCase {
         Response expectedResponse = Response.builder()
                 .slots(List.of(Slot.builder()
                         .filterDecision(1.0)
-                        .ext("{\"amazontest\":{\"decision\":0.0}}")
+                        .decision(0.0)
                         .build()))
-                .ext("{\"amazontest\":{\"learning\":1}}")
+                .learning(1)
                 .build();
 
         assertEquals(expectedResponse, output.getResponse());
@@ -211,9 +211,9 @@ public class BidRequestEvaluatorWithBloomFilterTest extends BaseTestCase {
         Response expectedResponse = Response.builder()
                 .slots(List.of(Slot.builder()
                         .filterDecision(1.0)
-                        .ext("{\"amazontest\":{\"decision\":1.0}}")
+                        .decision(1.0)
                         .build()))
-                .ext("{\"amazontest\":{\"learning\":1}}")
+                .learning(1)
                 .build();
 
         assertEquals(expectedResponse, output.getResponse());
@@ -253,9 +253,9 @@ public class BidRequestEvaluatorWithBloomFilterTest extends BaseTestCase {
         Response expectedResponse = Response.builder()
                 .slots(List.of(Slot.builder()
                         .filterDecision(1.0)
-                        .ext("{\"amazontest\":{\"decision\":0.0}}")
+                        .decision(0.0)
                         .build()))
-                .ext("{\"amazontest\":{\"learning\":1}}")
+                .learning(1)
                 .build();
 
         assertEquals(expectedResponse, output.getResponse());
@@ -290,9 +290,9 @@ public class BidRequestEvaluatorWithBloomFilterTest extends BaseTestCase {
         Response expectedResponse = Response.builder()
                 .slots(List.of(Slot.builder()
                         .filterDecision(1.0)
-                        .ext("{\"amazontest\":{\"decision\":0.0}}")
+                        .decision(0.0)
                         .build()))
-                .ext("{\"amazontest\":{\"learning\":1}}")
+                .learning(1)
                 .build();
 
         assertEquals(expectedResponse, output.getResponse());
@@ -334,9 +334,9 @@ public class BidRequestEvaluatorWithBloomFilterTest extends BaseTestCase {
         Response expectedResponse = Response.builder()
                 .slots(List.of(Slot.builder()
                         .filterDecision(1.0)
-                        .ext("{\"amazontest\":{\"decision\":0.0}}")
+                        .decision(0.0)
                         .build()))
-                .ext("{\"amazontest\":{\"learning\":1}}")
+                .learning(1)
                 .build();
 
         assertEquals(expectedResponse, output.getResponse());
@@ -368,9 +368,9 @@ public class BidRequestEvaluatorWithBloomFilterTest extends BaseTestCase {
         Response expectedResponse = Response.builder()
                 .slots(List.of(Slot.builder()
                         .filterDecision(1.0)
-                        .ext("{\"amazontest\":{\"decision\":1.0}}")
+                        .decision(1.0)
                         .build()))
-                .ext("{\"amazontest\":{\"learning\":1}}")
+                .learning(1)
                 .build();
 
         assertEquals(expectedResponse, output.getResponse());

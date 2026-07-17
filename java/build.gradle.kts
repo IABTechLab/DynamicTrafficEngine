@@ -14,6 +14,7 @@
 plugins {
     // Apply the java-library plugin for API and implementation separation.
     `java-library`
+    id("com.google.protobuf") version "0.9.4"
     id("io.freefair.lombok") version "8.6"
     id("com.github.johnrengelman.shadow") version "7.1.2"
     jacoco
@@ -31,6 +32,7 @@ dependencies {
     // This dependency is exported to consumers, that is to say found on their compile classpath.
     api(libs.commons.math3)
     api("com.google.guava:guava:33.1.0-jre")
+    api("com.google.protobuf:protobuf-java:3.25.3")
 
     // AWS S3 Start: https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/setup-project-gradle.html
     api(platform("software.amazon.awssdk:bom:2.25.41"))
@@ -67,6 +69,20 @@ dependencies {
 
     spotbugsPlugins("com.h3xstream.findsecbugs:findsecbugs-plugin:1.12.0")
     spotbugsSlf4j("org.slf4j:slf4j-simple:2.0.12")
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:3.25.3"
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir(layout.buildDirectory.dir("generated/source/proto/main/java"))
+        }
+    }
 }
 
 jacoco {

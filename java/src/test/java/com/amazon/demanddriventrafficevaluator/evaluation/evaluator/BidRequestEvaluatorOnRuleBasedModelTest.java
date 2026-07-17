@@ -4,12 +4,19 @@
 package com.amazon.demanddriventrafficevaluator.evaluation.evaluator;
 
 import com.amazon.demanddriventrafficevaluator.BaseTestCase;
+import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.protobuf.SlotMetadata;
 import com.amazon.demanddriventrafficevaluator.evaluation.experiment.ExperimentContext;
 import com.amazon.demanddriventrafficevaluator.evaluation.experiment.ExperimentManager;
 import com.amazon.demanddriventrafficevaluator.repository.entity.ExperimentConfiguration;
 import com.amazon.demanddriventrafficevaluator.repository.entity.ModelConfiguration;
 import com.amazon.demanddriventrafficevaluator.repository.provider.configuration.ConfigurationProvider;
+
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,10 +25,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.utils.ImmutableMap;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 import static com.amazon.demanddriventrafficevaluator.evaluation.evaluator.BidRequestEvaluatorOnRuleBasedModel.DEFAULT_RESPONSE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -121,6 +124,11 @@ class BidRequestEvaluatorOnRuleBasedModelTest extends BaseTestCase {
         assertEquals(1.0, slot.getFilterDecision());
         assertTrue(slot.getExt().contains("{\"decision\":0.0}"));
         assertTrue(output.getResponse().getExt().contains("{\"amazontest\":{\"learning\":1}}"));
+        var responseProto = output.getResponse().toExtProto();
+        assertEquals(1, responseProto.getLearning());
+        assertEquals(
+                Arrays.asList(SlotMetadata.newBuilder().setDecision(0.0).build()),
+                responseProto.getSlotsList());
 
         verify(experimentManager).setupExperimentContext(any(EvaluationContext.class));
         verify(modelConfigurationProvider).provide();
@@ -175,6 +183,11 @@ class BidRequestEvaluatorOnRuleBasedModelTest extends BaseTestCase {
         assertEquals(1.0, slot.getFilterDecision());
         assertTrue(slot.getExt().contains("{\"decision\":0.0}"));
         assertTrue(output.getResponse().getExt().contains("{\"amazontest\":{\"learning\":1}}"));
+        var responseProto = output.getResponse().toExtProto();
+        assertEquals(1, responseProto.getLearning());
+        assertEquals(
+                Arrays.asList(SlotMetadata.newBuilder().setDecision(0.0).build()),
+                responseProto.getSlotsList());
 
         verify(experimentManager).setupExperimentContext(any(EvaluationContext.class));
         verify(modelConfigurationProvider).provide();
@@ -238,6 +251,11 @@ class BidRequestEvaluatorOnRuleBasedModelTest extends BaseTestCase {
         assertEquals(1.0, slot.getFilterDecision());
         assertTrue(slot.getExt().contains("{\"decision\":0.0}"));
         assertTrue(output.getResponse().getExt().contains("{\"amazontest\":{\"learning\":1}}"));
+        var responseProto = output.getResponse().toExtProto();
+        assertEquals(1, responseProto.getLearning());
+        assertEquals(
+                Arrays.asList(SlotMetadata.newBuilder().setDecision(0.0).build()),
+                responseProto.getSlotsList());
 
         verify(experimentManager).setupExperimentContext(any(EvaluationContext.class));
         verify(modelConfigurationProvider).provide();
@@ -302,6 +320,11 @@ class BidRequestEvaluatorOnRuleBasedModelTest extends BaseTestCase {
         assertEquals(1.0, slot.getFilterDecision());
         assertTrue(slot.getExt().contains("{\"decision\":0.0}"));
         assertTrue(output.getResponse().getExt().contains("{\"amazontest\":{\"learning\":1}}"));
+        var responseProto = output.getResponse().toExtProto();
+        assertEquals(1, responseProto.getLearning());
+        assertEquals(
+                Arrays.asList(SlotMetadata.newBuilder().setDecision(0.0).build()),
+                responseProto.getSlotsList());
 
         verify(experimentManager).setupExperimentContext(any(EvaluationContext.class));
         verify(modelConfigurationProvider).provide();

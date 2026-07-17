@@ -12,6 +12,7 @@ import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.ModelEvaluat
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.Response;
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.RuleBasedModelEvaluator;
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.Slot;
+import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.protobuf.SlotMetadata;
 import com.amazon.demanddriventrafficevaluator.factory.DefaultLocalCacheRegistryFactory;
 import com.amazon.demanddriventrafficevaluator.factory.ExperimentManagerFactory;
 import com.amazon.demanddriventrafficevaluator.factory.ExtractorRegistryFactory;
@@ -59,6 +60,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
@@ -145,10 +147,20 @@ public class BidRequestEvaluatorOnRuleBasedModelTest extends BaseTestCase {
         Response expectedResponse = Response.builder()
                 .slots(List.of(Slot.builder()
                         .filterDecision(1.0)
-                        .ext("{\"amazontest\":{\"decision\":1.0}}")
+                        .decision(1.0)
                         .build()))
-                .ext("{\"amazontest\":{\"learning\":1}}")
+                .learning(1)
                 .build();
+
+        String expectedResponseJson = "{\"amazontest\":{\"learning\":1}}";
+        List<String> expectedSlotJson = Arrays.asList("{\"amazontest\":{\"decision\":1.0}}");
+        assertEquals(expectedResponseJson, output.getResponse().toExt());
+        assertEquals(expectedSlotJson, output.getResponse().getSlots().stream().map(s -> s.toExt()).toList());
+        var responseProto = output.getResponse().toExtProto();
+        assertEquals(1, responseProto.getLearning());
+        assertEquals(
+                Arrays.asList(SlotMetadata.newBuilder().setDecision(1.0).build()),
+                responseProto.getSlotsList());
         assertEquals(expectedResponse, output.getResponse());
     }
 
@@ -166,10 +178,20 @@ public class BidRequestEvaluatorOnRuleBasedModelTest extends BaseTestCase {
         Response expectedResponse = Response.builder()
                 .slots(List.of(Slot.builder()
                         .filterDecision(1.0)
-                        .ext("{\"amazontest\":{\"decision\":0.0}}")
+                        .decision(0.0)
                         .build()))
-                .ext("{\"amazontest\":{\"learning\":1}}")
+                .learning(1)
                 .build();
+
+        String expectedResponseJson = "{\"amazontest\":{\"learning\":1}}";
+        List<String> expectedSlotJson = Arrays.asList("{\"amazontest\":{\"decision\":0.0}}");
+        assertEquals(expectedResponseJson, output.getResponse().toExt());
+        assertEquals(expectedSlotJson, output.getResponse().getSlots().stream().map(s -> s.toExt()).toList());
+        var responseProto = output.getResponse().toExtProto();
+        assertEquals(1, responseProto.getLearning());
+        assertEquals(
+                Arrays.asList(SlotMetadata.newBuilder().setDecision(0.0).build()),
+                responseProto.getSlotsList());
         assertEquals(expectedResponse, output.getResponse());
     }
 
