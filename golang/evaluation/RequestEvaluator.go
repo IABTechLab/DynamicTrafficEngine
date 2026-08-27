@@ -11,8 +11,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/buger/jsonparser"
 	"github.com/google/uuid"
+	"github.com/ohler55/ojg/jp"
 	"github.com/rs/zerolog"
 	"golang.a2z.com/demanddriventrafficevaluator/interfaces"
 	"golang.a2z.com/demanddriventrafficevaluator/modelfeature"
@@ -252,14 +252,44 @@ func (b *RequestEvaluator) addMissingEntriesToMap(openRtbRequestMap map[string][
 		if exists && value != nil {
 			fieldValueMap[field] = value
 		} else {
-			fieldValueMap[field] = []string{}
+			// A field the SSP did not provide is treated the same as a field that the
+			// string parser could not resolve: a definite (normal) path yields a single
+			// empty string [""], an indefinite path yields an empty slice []. This keeps
+			// the map-input and string-input paths consistent for downstream transformers
+			// such as Exists.
+			fieldValueMap[field] = emptyValueForField(field)
 			Logger.Debug().Msgf("field [%v] is not found", field)
 		}
 	}
 	return fieldValueMap, nil
 }
 
+// emptyValueForField returns the placeholder value used when a field cannot be resolved.
+// It mirrors extractField's empty-match behavior so the string-input and map-input code
+// paths agree: a definite (normal) JSONPath yields [""] (matching the Java findPath
+// contract), while an indefinite path (wildcard, filter, union, slice, descent) yields [].
+// A field that is not a valid JSONPath expression is treated as indefinite ([]).
+func emptyValueForField(field string) []string {
+	expr, err := jp.ParseString(field)
+	if err != nil {
+		return []string{}
+	}
+	if expr.Normal() {
+		return []string{""}
+	}
+	return []string{}
+}
+
 // Extract values of all unique fields of all model features.
+//
+// Values are extracted using JSONPath expressions (via github.com/ohler55/ojg/jp),
+// mirroring the Java implementation which relies on Jayway JsonPath configured with
+// ALWAYS_RETURN_LIST. Each configured field is a JSONPath expression evaluated against the
+// parsed OpenRTB request. A field maps to:
+//   - a single-element slice for a scalar match (e.g. "$.site.publisher.id"),
+//   - a multi-element slice for a wildcard/filter match (e.g. "$.imp[0].pmp.deals[*].id"),
+//   - a single-element slice containing "null" when the field exists but is JSON null,
+//   - an empty slice when the field does not exist or the path fails to resolve.
 func (b *RequestEvaluator) parse(openRtbRequest string, externalFields []string) (map[string][]string, error) {
 	uniqueFeatureFields, err := b.modelConfigurationHandler.GetAllUniqueFeatureFields()
 	if err != nil {
@@ -268,149 +298,82 @@ func (b *RequestEvaluator) parse(openRtbRequest string, externalFields []string)
 	uniqueFeatureFields = append(uniqueFeatureFields, externalFields...)
 	Logger.Debug().Msgf("uniqueFeatureFields: %v", uniqueFeatureFields)
 
-	// Separate wildcard fields (containing [*]) from scalar fields
-	var scalarFields []string
-	var wildcardFields []string
+	// Parse the request once into a generic document. UseNumber preserves the exact
+	// textual representation of numeric values (e.g. "970", "6.33") instead of coercing
+	// them through float64 formatting.
+	document, err := parseJSONDocument(openRtbRequest)
+	if err != nil {
+		return nil, fmt.Errorf("fail to parse openRtbRequest as JSON due to %v", err)
+	}
+
+	fieldValueMap := make(map[string][]string, len(uniqueFeatureFields))
 	for _, field := range uniqueFeatureFields {
-		if strings.Contains(field, "[*]") {
-			wildcardFields = append(wildcardFields, field)
-		} else {
-			scalarFields = append(scalarFields, field)
-		}
-	}
-
-	var fieldValueMap = make(map[string][]string)
-
-	// Process scalar fields using existing EachKey() approach
-	if len(scalarFields) > 0 {
-		paths := convertFieldsToPaths(scalarFields)
-		Logger.Debug().Msgf("paths: %v", paths)
-		jsonparser.EachKey([]byte(openRtbRequest), func(idx int, value []byte, vt jsonparser.ValueType, err error) {
-			var str string
-			switch vt {
-			case jsonparser.String:
-				str = string(value)
-			default:
-				str = string(value)
-			}
-			fieldValueMap[convertPathsToField(paths[idx])] = []string{str}
-		}, paths...)
-	}
-
-	// Process wildcard fields using extractWildcardField
-	jsonData := []byte(openRtbRequest)
-	for _, field := range wildcardFields {
-		fieldValueMap[field] = b.extractWildcardField(jsonData, field)
+		fieldValueMap[field] = b.extractField(document, field)
 	}
 
 	Logger.Debug().Msgf("fieldValueMap: %v", fieldValueMap)
-	// Required as JSON Parser forEach doesn't call the iterator function for non-existing keys in JSON
-	for _, field := range uniqueFeatureFields {
-		_, exists := fieldValueMap[field]
-		if !exists {
-			fieldValueMap[field] = []string{}
-			Logger.Debug().Msgf("field [%v] is not found", field)
-		}
-	}
 	return fieldValueMap, nil
 }
 
-// extractWildcardField extracts multiple values from a JSON array path containing [*].
-// It splits the path at [*], navigates to the parent array, iterates each element,
-// and extracts the suffix field from each element.
-func (b *RequestEvaluator) extractWildcardField(jsonData []byte, fieldPath string) []string {
-	// Split the field path at [*]
-	parts := strings.SplitN(fieldPath, "[*]", 2)
-	if len(parts) != 2 {
+// parseJSONDocument decodes a raw JSON string into a generic document suitable for
+// JSONPath evaluation, preserving numbers as json.Number to retain their exact form.
+func parseJSONDocument(rawJSON string) (interface{}, error) {
+	decoder := json.NewDecoder(strings.NewReader(rawJSON))
+	decoder.UseNumber()
+	var document interface{}
+	if err := decoder.Decode(&document); err != nil {
+		return nil, err
+	}
+	return document, nil
+}
+
+// extractField compiles a single JSONPath expression and evaluates it against the parsed
+// document, flattening the matches into a slice of strings.
+//
+// The empty-match behavior mirrors the Java implementation (Jayway JsonPath with
+// ALWAYS_RETURN_LIST as consumed by OpenRtbRequestContextJsonDocument.findPath):
+//   - A definite (normal) path — only object keys and array indices, e.g. "$.app" or
+//     "$.site.publisher.id" — that matches nothing is treated like Jayway's
+//     PathNotFoundException and yields a single empty string [""]. This keeps downstream
+//     transformers such as Exists deterministic: a missing field becomes "0" rather than
+//     dropping out of the feature entirely.
+//   - An indefinite path — containing a wildcard, filter, union, slice, or descent, e.g.
+//     "$.imp[0].pmp.deals[*].id" — that matches nothing yields an empty slice [], since a
+//     wildcard over zero elements legitimately produces no values.
+//
+// An invalid expression yields an empty slice.
+func (b *RequestEvaluator) extractField(document interface{}, field string) []string {
+	expr, err := jp.ParseString(field)
+	if err != nil {
+		Logger.Debug().Msgf("field [%v] is not a valid JSONPath expression: %v", field, err)
 		return []string{}
 	}
-
-	prefix := parts[0] // e.g., "$.imp[0].pmp.deals"
-	suffix := parts[1] // e.g., ".id"
-
-	// Remove leading "." from suffix if present
-	suffix = strings.TrimPrefix(suffix, ".")
-
-	// Convert prefix to jsonparser path segments
-	// Remove "$." prefix
-	prefix = strings.TrimPrefix(prefix, "$.")
-
-	// Parse the prefix path into segments compatible with jsonparser.Get()
-	prefixSegments := parsePathSegments(prefix)
-
-	// Navigate to the parent array using jsonparser.Get()
-	arrayData, dataType, _, err := jsonparser.Get(jsonData, prefixSegments...)
-	if err != nil || dataType != jsonparser.Array {
-		Logger.Debug().Msgf("wildcard field [%v] prefix path does not resolve to an array: %v", fieldPath, err)
+	// jp.Get always returns a slice of matches (equivalent to Jayway ALWAYS_RETURN_LIST).
+	matches := expr.Get(document)
+	if len(matches) == 0 {
+		// No match: a definite path yields [""] (Java findPath contract), an indefinite
+		// path yields []. This is the same rule as emptyValueForField, applied here with
+		// the already-parsed expr to avoid re-parsing.
+		if expr.Normal() {
+			return []string{""}
+		}
 		return []string{}
 	}
-
-	// Iterate the array and extract suffix field from each element
-	var values []string
-	suffixSegments := parsePathSegments(suffix)
-
-	jsonparser.ArrayEach(arrayData, func(elementValue []byte, dataType jsonparser.ValueType, offset int, err error) {
-		if err != nil {
-			return
-		}
-		if len(suffixSegments) == 0 {
-			// No suffix - use the element value directly
-			values = append(values, string(elementValue))
-			return
-		}
-		// Extract the suffix field from the array element
-		val, valType, _, getErr := jsonparser.Get(elementValue, suffixSegments...)
-		if getErr != nil {
-			return
-		}
-		switch valType {
-		case jsonparser.String:
-			values = append(values, string(val))
-		case jsonparser.NotExist:
-			// Skip non-existing fields
-		default:
-			values = append(values, string(val))
-		}
-	})
-
+	values := make([]string, 0, len(matches))
+	for _, item := range matches {
+		values = append(values, jsonValueToString(item))
+	}
 	return values
 }
 
-// parsePathSegments converts a dot-notation path string into jsonparser-compatible path segments.
-// Handles bracket notation: "imp[0].pmp.deals" → ["imp", "[0]", "pmp", "deals"]
-func parsePathSegments(path string) []string {
-	if path == "" {
-		return []string{}
+// jsonValueToString renders a scalar JSON value as a string. A nil (JSON null) becomes
+// "null"; all other values use their natural string representation (json.Number preserves
+// the original numeric text).
+func jsonValueToString(value interface{}) string {
+	if value == nil {
+		return "null"
 	}
-	// Split on "." but handle bracket notation
-	rawParts := strings.Split(path, ".")
-	var segments []string
-	for _, part := range rawParts {
-		if part == "" {
-			continue
-		}
-		// Check if part contains bracket notation like "imp[0]"
-		if bracketIdx := strings.Index(part, "["); bracketIdx >= 0 {
-			// Split into name and bracket parts
-			name := part[:bracketIdx]
-			rest := part[bracketIdx:]
-			if name != "" {
-				segments = append(segments, name)
-			}
-			// Parse bracket indices - e.g., "[0]" or "[0][1]"
-			for len(rest) > 0 {
-				closeIdx := strings.Index(rest, "]")
-				if closeIdx < 0 {
-					break
-				}
-				segments = append(segments, rest[:closeIdx+1])
-				rest = rest[closeIdx+1:]
-			}
-		} else {
-			segments = append(segments, part)
-		}
-	}
-	return segments
+	return fmt.Sprintf("%v", value)
 }
 
 func (b *RequestEvaluator) getModelDefinitions(context *interfaces.Context) ([]interfaces.ModelDefinition, error) {
@@ -483,20 +446,6 @@ func (b *RequestEvaluator) buildResponse(context *interfaces.Context) Response {
 		Slots: slots,
 		Ext:   extension,
 	}
-}
-
-func convertFieldsToPaths(fields []string) [][]string {
-	// Remove "$." prefix if present and add delimiter "." around "[]"
-	var paths [][]string
-	for _, field := range fields {
-		field = strings.TrimPrefix(field, "$.")
-		paths = append(paths, strings.Split(strings.ReplaceAll(field, "[", ".["), "."))
-	}
-	return paths
-}
-
-func convertPathsToField(paths []string) string {
-	return "$." + strings.ReplaceAll(strings.Join(paths, "."), ".[", "[")
 }
 
 func buildSlots(context *interfaces.Context) []Slot {

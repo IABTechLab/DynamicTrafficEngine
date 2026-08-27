@@ -49,20 +49,22 @@ var (
 		"$.imp[0].banner.pos",
 		"$.device.devicetype",
 	}
+	// Missing definite (normal) JSONPath fields resolve to a single empty string [""],
+	// matching the Java implementation (Jayway PathNotFoundException → singletonList("")).
 	CompleteFieldValueMap = map[string][]string{
 		"$.site.publisher.id":  {"539014228"},
 		"$.imp[0].banner.w":    {"970"},
 		"$.device.geo.country": {"USA"},
-		"$.app":                {},
-		"$.imp[0].video.h":     {},
-		"$.imp[0].video.pos":   {},
+		"$.app":                {""},
+		"$.imp[0].video.h":     {""},
+		"$.imp[0].video.pos":   {""},
 		"$.id":                 {"e0371864-238f-41b1-a544-59b4b6a602ec"},
 		"$.imp[0].banner.h":    {"250"},
 		"$.imp[0].banner.pos":  {"1"},
 		"$.device.devicetype":  {"2"},
-		"$.imp[0].video":       {},
-		"$.app.publisher.id":   {},
-		"$.imp[0].video.w":     {},
+		"$.imp[0].video":       {""},
+		"$.app.publisher.id":   {""},
+		"$.imp[0].video.w":     {""},
 	}
 	IncompleteFieldValueMap = map[string][]string{
 		"$.site.publisher.id":  {"539014228"},
@@ -693,18 +695,20 @@ func (suite *RequestEvaluatorTestSuite) TestAddMissingEntriesToMap() {
 			},
 		},
 		{
-			name: "missing key gets empty slice",
+			// Missing definite (normal) path resolves to [""], matching the string
+			// parser's findPath contract so both input paths agree.
+			name: "missing definite key gets single empty string",
 			inputMap: map[string][]string{
 				"$.site.publisher.id": {"539014228"},
 			},
 			uniqueFields: []string{"$.site.publisher.id", "$.device.geo.country"},
 			expectedResult: map[string][]string{
 				"$.site.publisher.id":  {"539014228"},
-				"$.device.geo.country": {},
+				"$.device.geo.country": {""},
 			},
 		},
 		{
-			name: "nil slice treated as missing",
+			name: "nil slice treated as missing definite key",
 			inputMap: map[string][]string{
 				"$.site.publisher.id":  {"539014228"},
 				"$.device.geo.country": nil,
@@ -712,7 +716,19 @@ func (suite *RequestEvaluatorTestSuite) TestAddMissingEntriesToMap() {
 			uniqueFields: []string{"$.site.publisher.id", "$.device.geo.country"},
 			expectedResult: map[string][]string{
 				"$.site.publisher.id":  {"539014228"},
-				"$.device.geo.country": {},
+				"$.device.geo.country": {""},
+			},
+		},
+		{
+			// Missing indefinite (wildcard) path resolves to an empty slice, not [""].
+			name: "missing wildcard key gets empty slice",
+			inputMap: map[string][]string{
+				"$.site.publisher.id": {"539014228"},
+			},
+			uniqueFields: []string{"$.site.publisher.id", "$.imp[0].pmp.deals[*].id"},
+			expectedResult: map[string][]string{
+				"$.site.publisher.id":      {"539014228"},
+				"$.imp[0].pmp.deals[*].id": {},
 			},
 		},
 		{
@@ -730,13 +746,14 @@ func (suite *RequestEvaluatorTestSuite) TestAddMissingEntriesToMap() {
 			},
 		},
 		{
-			name:         "all fields missing get empty slices",
+			// All definite paths missing → each resolves to [""].
+			name:         "all definite fields missing get single empty strings",
 			inputMap:     map[string][]string{},
 			uniqueFields: []string{"$.site.publisher.id", "$.device.geo.country", "$.imp[0].banner.w"},
 			expectedResult: map[string][]string{
-				"$.site.publisher.id":  {},
-				"$.device.geo.country": {},
-				"$.imp[0].banner.w":    {},
+				"$.site.publisher.id":  {""},
+				"$.device.geo.country": {""},
+				"$.imp[0].banner.w":    {""},
 			},
 		},
 	}
@@ -756,8 +773,8 @@ func (suite *RequestEvaluatorTestSuite) TestAddMissingEntriesToMap() {
 	}
 }
 
-func (suite *RequestEvaluatorTestSuite) TestExtractWildcardField() {
-	jsonWithDeals := `{"imp":[{"pmp":{"deals":[{"id":"deal-1","bidfloor":1.5},{"id":"deal-2","bidfloor":2.0},{"id":"deal-3","bidfloor":3.0}]}}]}`
+func (suite *RequestEvaluatorTestSuite) TestExtractField() {
+	jsonWithDeals := `{"imp":[{"pmp":{"deals":[{"id":"deal-1","bidfloor":1.5},{"id":"deal-2","bidfloor":2.0},{"id":"deal-3","bidfloor":3.0}]}}],"site":{"publisher":{"id":"pub-1"}},"nullKey":null}`
 
 	tests := []struct {
 		name      string
@@ -772,6 +789,24 @@ func (suite *RequestEvaluatorTestSuite) TestExtractWildcardField() {
 			expected:  []string{"deal-1", "deal-2", "deal-3"},
 		},
 		{
+			name:      "scalar path wraps value in single-element slice",
+			jsonData:  jsonWithDeals,
+			fieldPath: "$.site.publisher.id",
+			expected:  []string{"pub-1"},
+		},
+		{
+			name:      "numeric scalar preserves original representation",
+			jsonData:  jsonWithDeals,
+			fieldPath: "$.imp[0].pmp.deals[0].bidfloor",
+			expected:  []string{"1.5"},
+		},
+		{
+			name:      "present-but-null field returns literal null",
+			jsonData:  jsonWithDeals,
+			fieldPath: "$.nullKey",
+			expected:  []string{"null"},
+		},
+		{
 			name:      "wildcard path on empty array returns empty slice",
 			jsonData:  `{"imp":[{"pmp":{"deals":[]}}]}`,
 			fieldPath: "$.imp[0].pmp.deals[*].id",
@@ -784,23 +819,44 @@ func (suite *RequestEvaluatorTestSuite) TestExtractWildcardField() {
 			expected:  []string{},
 		},
 		{
-			name:      "malformed JSON returns empty slice",
-			jsonData:  `{not valid json`,
-			fieldPath: "$.imp[0].pmp.deals[*].id",
-			expected:  []string{},
+			// Definite (normal) path that matches nothing → [""], matching Java's
+			// findPath returning singletonList("") on PathNotFoundException.
+			name:      "non-existent scalar path returns single empty string",
+			jsonData:  jsonWithDeals,
+			fieldPath: "$.nonexistent.field",
+			expected:  []string{""},
+		},
+		{
+			// A definite path whose leaf key is absent under an existing parent also
+			// resolves to [""].
+			name:      "missing leaf under existing parent returns single empty string",
+			jsonData:  jsonWithDeals,
+			fieldPath: "$.site.publisher.name",
+			expected:  []string{""},
 		},
 	}
 
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			result := suite.evaluator.extractWildcardField([]byte(tt.jsonData), tt.fieldPath)
-			if len(tt.expected) == 0 {
-				suite.Empty(result)
-			} else {
-				suite.Equal(tt.expected, result)
-			}
+			document, err := parseJSONDocument(tt.jsonData)
+			suite.NoError(err)
+			result := suite.evaluator.extractField(document, tt.fieldPath)
+			// Distinguish [] from [""]: both are len-mismatch-sensitive, so compare directly.
+			suite.Equal(tt.expected, result)
 		})
 	}
+}
+
+func (suite *RequestEvaluatorTestSuite) TestParse_ReturnErr_MalformedJSON() {
+	suite.mockModelConfigHandler.EXPECT().
+		GetAllUniqueFeatureFields().
+		Return(AllUniqueFeatureFields, nil).
+		Once()
+
+	fieldValueMap, err := suite.evaluator.parse(`{not valid json`, []string{"$.id"})
+
+	suite.Nil(fieldValueMap, "Field value map should be nil on malformed JSON")
+	suite.ErrorContains(err, "fail to parse openRtbRequest as JSON")
 }
 
 func (suite *RequestEvaluatorTestSuite) TestEvaluate_UsesConfigurableAggregator_WhenAggregationSchemaIsNonNil() {
@@ -1007,9 +1063,18 @@ func (suite *RequestEvaluatorTestSuite) TestParse_MultiValueExtraction() {
 			expectedValue: []string{"539014228"},
 		},
 		{
-			name:          "missing field returns empty slice",
+			// Missing definite (normal) path resolves to a single empty string,
+			// matching the Java findPath contract.
+			name:          "missing definite field returns single empty string",
 			uniqueFields:  []string{"$.nonexistent.field"},
 			expectedField: "$.nonexistent.field",
+			expectedValue: []string{""},
+		},
+		{
+			// Missing wildcard (indefinite) path resolves to an empty slice.
+			name:          "missing wildcard field returns empty slice",
+			uniqueFields:  []string{"$.imp[0].pmp.deals[*].nonexistent"},
+			expectedField: "$.imp[0].pmp.deals[*].nonexistent",
 			expectedValue: []string{},
 		},
 	}
