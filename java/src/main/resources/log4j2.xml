@@ -10,8 +10,8 @@
     </Console>
     <!-- File Appender -->
     <RollingFile name="FileAppender"
-      fileName="logs/application.log"
-      filePattern="logs/application-%d{yyyy-MM-dd}-%i.log">
+      fileName="build/logs/application.log"
+      filePattern="build/logs/application-%d{yyyy-MM-dd}-%i.log">
       <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
       <Policies>
         <SizeBasedTriggeringPolicy size="10MB"/>
