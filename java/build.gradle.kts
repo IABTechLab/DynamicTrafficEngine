@@ -16,11 +16,11 @@ plugins {
     `java-library`
     id("com.google.protobuf") version "0.9.4"
     id("io.freefair.lombok") version "9.5.0"
-    id("com.gradleup.shadow") version "9.4.2"
+    id("com.gradleup.shadow") version "9.6.1"
     jacoco
-    id("com.github.spotbugs") version "6.5.6"
+    id("com.github.spotbugs") version "6.5.11"
     checkstyle
-    id("org.cyclonedx.bom") version "3.2.4"
+    id("org.cyclonedx.bom") version "3.4.1"
 }
 
 repositories {
@@ -74,14 +74,6 @@ dependencies {
 protobuf {
     protoc {
         artifact = "com.google.protobuf:protoc:3.25.3"
-    }
-}
-
-sourceSets {
-    main {
-        java {
-            srcDir(layout.buildDirectory.dir("generated/source/proto/main/java"))
-        }
     }
 }
 
@@ -173,7 +165,7 @@ tasks.check {
 testing {
     suites {
         // Configure the built-in test suite
-        val test by getting(JvmTestSuite::class) {
+        val test = getByName<JvmTestSuite>("test") {
             // Use JUnit4 test framework
             useJUnitJupiter()
         }
