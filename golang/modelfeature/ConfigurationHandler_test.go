@@ -5,7 +5,9 @@ package modelfeature
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -55,7 +57,7 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 	suite.NoError(err, "Failed to read file")
 	suite.daoFactory.EXPECT().
 		GetS3Object(mock.Anything, mock.Anything, mock.Anything).
-		Return(&s3.GetObjectOutput{ETag: &eTagString}, nil).
+		Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).
 		Once()
 	suite.daoFactory.EXPECT().
 		ReadContent(mock.Anything).
@@ -93,7 +95,7 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 		Once()
 	suite.daoFactory.EXPECT().
 		GetS3Object(mock.Anything, mock.Anything, mock.Anything).
-		Return(&s3.GetObjectOutput{ETag: &eTagString}, nil).
+		Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).
 		Once()
 
 	success, err := suite.experimentConfigurationHandler.Load()
@@ -110,7 +112,7 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 		Once()
 	suite.daoFactory.EXPECT().
 		GetS3Object(mock.Anything, mock.Anything, mock.Anything).
-		Return(&s3.GetObjectOutput{ETag: &eTagString}, nil).
+		Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).
 		Once()
 	suite.daoFactory.EXPECT().
 		ReadContent(mock.Anything).
@@ -132,7 +134,7 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 	fileContent := []byte("invalid-json-data")
 	suite.daoFactory.EXPECT().
 		GetS3Object(mock.Anything, mock.Anything, mock.Anything).
-		Return(&s3.GetObjectOutput{ETag: &eTagString}, nil).
+		Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).
 		Once()
 	suite.daoFactory.EXPECT().
 		ReadContent(mock.Anything).
@@ -155,7 +157,7 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 	suite.NoError(err, "Failed to read file")
 	suite.daoFactory.EXPECT().
 		GetS3Object(mock.Anything, mock.Anything, mock.Anything).
-		Return(&s3.GetObjectOutput{ETag: &eTagString}, nil).
+		Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).
 		Once()
 	suite.daoFactory.EXPECT().
 		ReadContent(mock.Anything).
@@ -167,7 +169,7 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 		Once()
 
 	success, err := suite.experimentConfigurationHandler.Load()
-	suite.EqualError(err, "error setting data to local cache [Configuration] with identifier [Experiment] and Value [{ExperimentConfiguration map[DemandDrivenTrafficEvaluatorSoftFilter:{DemandDrivenTrafficEvaluatorSoftFilter soft-filter [{T 80} {C 20}] 1654498800000 1727334000000}] map[adsp_low-value_v2:DemandDrivenTrafficEvaluatorSoftFilter]}]")
+	suite.EqualError(err, "error setting data to local cache [Configuration] with identifier [Experiment] and Value [{ExperimentConfiguration map[DemandDrivenTrafficEvaluatorSoftFilter:{DemandDrivenTrafficEvaluatorSoftFilter soft-filter [{T 80} {C 20}] 1654498800000 1727334000000 <nil>}] map[adsp_low-value_v2:DemandDrivenTrafficEvaluatorSoftFilter]}]")
 	suite.False(success, "Experiment configuration should not be loaded successfully")
 }
 
@@ -258,7 +260,7 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_Ret
 		Once()
 
 	success, err := suite.experimentConfigurationHandler.Load()
-	suite.EqualError(err, "error setting data to local cache [Configuration] with identifier [Experiment] and Value [{ExperimentConfiguration map[DemandDrivenTrafficEvaluatorSoftFilter:{DemandDrivenTrafficEvaluatorSoftFilter soft-filter [{T 80} {C 20}] 1654498800000 1727334000000}] map[adsp_low-value_v2:DemandDrivenTrafficEvaluatorSoftFilter]}]")
+	suite.EqualError(err, "error setting data to local cache [Configuration] with identifier [Experiment] and Value [{ExperimentConfiguration map[DemandDrivenTrafficEvaluatorSoftFilter:{DemandDrivenTrafficEvaluatorSoftFilter soft-filter [{T 80} {C 20}] 1654498800000 1727334000000 <nil>}] map[adsp_low-value_v2:DemandDrivenTrafficEvaluatorSoftFilter]}]")
 	suite.False(success, "Experiment configuration should not be loaded successfully")
 }
 

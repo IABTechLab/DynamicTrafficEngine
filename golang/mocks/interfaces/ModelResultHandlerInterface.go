@@ -84,6 +84,53 @@ func (_c *ModelResultHandlerInterface_BuildKey_Call) RunAndReturn(run func(model
 	return _c
 }
 
+// BuildKeys provides a mock function for the type ModelResultHandlerInterface
+func (_mock *ModelResultHandlerInterface) BuildKeys(modelFeatures []interfaces.ModelFeature) []string {
+	ret := _mock.Called(modelFeatures)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BuildKeys")
+	}
+
+	var r0 []string
+	if returnFunc, ok := ret.Get(0).(func([]interfaces.ModelFeature) []string); ok {
+		r0 = returnFunc(modelFeatures)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+	return r0
+}
+
+// ModelResultHandlerInterface_BuildKeys_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BuildKeys'
+type ModelResultHandlerInterface_BuildKeys_Call struct {
+	*mock.Call
+}
+
+// BuildKeys is a helper method to define mock.On call
+//   - modelFeatures
+func (_e *ModelResultHandlerInterface_Expecter) BuildKeys(modelFeatures interface{}) *ModelResultHandlerInterface_BuildKeys_Call {
+	return &ModelResultHandlerInterface_BuildKeys_Call{Call: _e.mock.On("BuildKeys", modelFeatures)}
+}
+
+func (_c *ModelResultHandlerInterface_BuildKeys_Call) Run(run func(modelFeatures []interfaces.ModelFeature)) *ModelResultHandlerInterface_BuildKeys_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].([]interfaces.ModelFeature))
+	})
+	return _c
+}
+
+func (_c *ModelResultHandlerInterface_BuildKeys_Call) Return(strings []string) *ModelResultHandlerInterface_BuildKeys_Call {
+	_c.Call.Return(strings)
+	return _c
+}
+
+func (_c *ModelResultHandlerInterface_BuildKeys_Call) RunAndReturn(run func(modelFeatures []interfaces.ModelFeature) []string) *ModelResultHandlerInterface_BuildKeys_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // BuildModelResultFileName provides a mock function for the type ModelResultHandlerInterface
 func (_mock *ModelResultHandlerInterface) BuildModelResultFileName(sspIdentifier string, modelIdentifier string) string {
 	ret := _mock.Called(sspIdentifier, modelIdentifier)

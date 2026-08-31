@@ -36,7 +36,7 @@ requestEvaluator := demanddriventrafficevaluator.NewRequestEvaluator("<supplier-
 
 requestOutput := requestEvaluator.Evaluate(&evaluation.BidRequestEvaluatorInput{
     OpenRtbRequest: "<open-rtb-request-string>",
-    OpenRtbRequestMap: <map[string]string>
+    OpenRtbRequestMap: <map[string][]string>
 })
 ```
 
@@ -48,7 +48,7 @@ requestOutput := requestEvaluator.Evaluate(&evaluation.BidRequestEvaluatorInput{
 The Evaluate function takes a reference to a `BidRequestEvaluatorInput` object, which requires at least 1 of `OpenRtbRequest` or `OpenRtbRequestMap` to be populated.
 
 1. `OpenRtbRequest` is a string of the raw OpenRTB request, in JSON format. 
-2. `OpenRtbRequestMap` is an abridged OpenRTB request, as a Map of string -> string. The keys are the path of the field, in dot notation described in JsonPath, and the values are the the string value of the field.
+2. `OpenRtbRequestMap` is an abridged OpenRTB request, as a Map of string -> []string. The keys are the path of the field, in dot notation described in JsonPath, and the values are a list of the string values of the field.
 
 ## API Specifications
 | Response Body Field | Type                       | Description<br>                                                                                                                                                                                                                                                                                                                                                           |

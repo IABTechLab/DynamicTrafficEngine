@@ -27,6 +27,7 @@ func init() {
 }
 
 const KeyDelimiter = "|"
+const MaxKeys = 100
 
 // Applies transformations to generate a value for a specific feature for model evaluation.
 func Transform(feature *interfaces.ModelFeature) (*interfaces.ModelFeature, error) {
@@ -85,6 +86,10 @@ func (t *ModelResultHandler) Load(sspIdentifier string) error {
 	var putItemTotalSize int64
 
 	for modelIdentifier, modelDefinition := range modelConfiguration.ModelDefinitionByIdentifier {
+		if modelDefinition.ModelFormat == interfaces.ModelFormatBloomFilter {
+			continue
+		}
+
 		modelResultValue, exists := ModelTypeValue[modelDefinition.Type]
 		if !exists {
 			// default to a low value model type (0.0) if not defined
@@ -179,25 +184,51 @@ func (t *ModelResultHandler) loadSingleModel(sspIdentifier string, modelIdentifi
 }
 
 func (t *ModelResultHandler) Provide(modelIdentifier string, features []interfaces.ModelFeature, defaultValue float32) (*interfaces.ModelResult, error) {
-	key := t.BuildKey(features)
-	Logger.Debug().Msgf("Providing model result for identifier %q and Key %q", modelIdentifier, key)
-	modelResult, exists := t.localCacheFactory.GetFromLocalCache(modelIdentifier, key)
-	if !exists {
-		Logger.Info().Msgf("No entry exists for identifer %q and key %q. Default return value is %f", modelIdentifier, key, defaultValue)
+	keys := t.BuildKeys(features)
+
+	if len(keys) == 0 {
 		return &interfaces.ModelResult{
-			Value: defaultValue,
-			Key:   key,
+			Value:  defaultValue,
+			Key:    "",
+			Keys:   []string{""},
+			Values: []float32{defaultValue},
 		}, nil
 	}
 
-	result, ok := modelResult.(float32)
-	if !ok {
-		return nil, fmt.Errorf("invalid model result type for identifier %q and Key %q: expected float32, got %T", modelIdentifier, key, modelResult)
+	allKeys := make([]string, len(keys))
+	allValues := make([]float32, len(keys))
+	copy(allKeys, keys)
+
+	var firstHitValue float32 = defaultValue
+	var firstHitKey string = keys[0]
+	found := false
+
+	for i, key := range keys {
+		cachedResult, exists := t.localCacheFactory.GetFromLocalCache(modelIdentifier, key)
+		if exists {
+			result, ok := cachedResult.(float32)
+			if ok {
+				allValues[i] = result
+				if !found {
+					firstHitValue = result
+					firstHitKey = key
+					found = true
+				}
+			} else {
+				allValues[i] = defaultValue
+			}
+		} else {
+			allValues[i] = defaultValue
+		}
 	}
 
+	Logger.Debug().Msgf("Providing model result for identifier %q: first-hit key %q, value %f, total keys %d", modelIdentifier, firstHitKey, firstHitValue, len(allKeys))
+
 	return &interfaces.ModelResult{
-		Value: result,
-		Key:   key,
+		Value:  firstHitValue,
+		Key:    firstHitKey,
+		Keys:   allKeys,
+		Values: allValues,
 	}, nil
 }
 
@@ -209,11 +240,47 @@ func (t *ModelResultHandler) BuildModelResultFileName(sspIdentifier string, mode
 }
 
 func (t *ModelResultHandler) BuildKey(modelFeatures []interfaces.ModelFeature) string {
-	var allValues []string
+	keys := t.BuildKeys(modelFeatures)
+	if len(keys) == 0 {
+		return ""
+	}
+	return keys[0]
+}
 
-	for _, feature := range modelFeatures {
-		allValues = append(allValues, feature.Values...)
+// BuildKeys generates all permutation keys from multi-valued features.
+// Returns the Cartesian product of all feature value lists, joined by KeyDelimiter.
+// Capped at MaxKeys (100).
+func (t *ModelResultHandler) BuildKeys(modelFeatures []interfaces.ModelFeature) []string {
+	if len(modelFeatures) == 0 {
+		return []string{}
 	}
 
-	return strings.Join(allValues, KeyDelimiter)
+	// Collect value lists, check for empty
+	for _, feature := range modelFeatures {
+		if len(feature.Values) == 0 {
+			return []string{}
+		}
+	}
+
+	// Compute Cartesian product iteratively
+	keys := []string{""}
+	for _, feature := range modelFeatures {
+		var newKeys []string
+		for _, prefix := range keys {
+			for _, value := range feature.Values {
+				var key string
+				if prefix == "" {
+					key = value
+				} else {
+					key = prefix + KeyDelimiter + value
+				}
+				newKeys = append(newKeys, key)
+				if len(newKeys) >= MaxKeys {
+					return newKeys
+				}
+			}
+		}
+		keys = newKeys
+	}
+	return keys
 }

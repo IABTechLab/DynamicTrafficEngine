@@ -10,6 +10,8 @@ import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.ModelEvaluat
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.ModelEvaluatorOutput;
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.Signal;
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.Slot;
+import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.protobuf.ResponseMetadata;
+import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.protobuf.SlotMetadata;
 import com.amazon.demanddriventrafficevaluator.repository.entity.ModelDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,6 +27,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
@@ -150,5 +153,39 @@ class ResponseUtilTest {
         assertTrue(debugInfo.contains("[ModelLevelDebugInfo]"));
         assertTrue(debugInfo.contains("Model Debug 1"));
         assertTrue(debugInfo.contains("Model Debug 2"));
+    }
+
+    @Test
+    void testEncodedDecodeProto() {
+        ResponseMetadata expectedResponse =
+                ResponseMetadata
+                        .newBuilder()
+                        .addSlots(SlotMetadata.newBuilder().setDecision(99))
+                        .setLearning(111)
+                        .build();
+        var encoded = ResponseUtil.encodedResponseMetadata(expectedResponse);
+        ResponseMetadata response = ResponseUtil.decodeResponseMetadata(encoded);
+        assertEquals(expectedResponse, response);
+    }
+
+    @Test
+    void testDecodeFailureOnInvalidBase64() {
+        var exception = assertThrows(IllegalArgumentException.class,
+                () -> ResponseUtil.decodeResponseMetadata("*&*&"));
+        assertTrue(exception.getMessage().contains("Illegal base64 character"));
+    }
+
+    @Test
+    void testDecodeFailureOnInvalidBytes() {
+        var exception = assertThrows(IllegalArgumentException.class,
+                () -> ResponseUtil.decodeResponseMetadata("08983490832"));
+        assertTrue(exception.getMessage().contains(
+                "Encoded bytes are not a valid base64 representation of a ResponseMetadata"));
+    }
+
+    @Test
+    void testDecodeEmptyString() {
+        ResponseMetadata result = ResponseUtil.decodeResponseMetadata("");
+        assertEquals(ResponseMetadata.getDefaultInstance(), result);
     }
 }

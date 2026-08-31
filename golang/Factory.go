@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/rs/zerolog"
+	"golang.a2z.com/demanddriventrafficevaluator/bloomfilter"
 	"golang.a2z.com/demanddriventrafficevaluator/evaluation"
 	"golang.a2z.com/demanddriventrafficevaluator/interfaces"
 	"golang.a2z.com/demanddriventrafficevaluator/modelfeature"
@@ -24,6 +25,7 @@ var (
 	daoFactory                     interfaces.DaoFactoryInterface
 	localCacheFactory              interfaces.LocalCacheFactoryInterface
 	timeProvider                   interfaces.TimeProvider
+	bloomFilterStore               *bloomfilter.BloomFilterStore
 	modelConfigOnce                sync.Once
 	experimentConfigOnce           sync.Once
 	modelResultOnce                sync.Once
@@ -31,6 +33,7 @@ var (
 	daoFactoryOnce                 sync.Once
 	localCacheFactoryOnce          sync.Once
 	timeProviderOnce               sync.Once
+	bloomFilterStoreOnce           sync.Once
 )
 
 var Logger zerolog.Logger
@@ -61,10 +64,19 @@ func NewTaskInitializer(supplierName string, credentialProvider aws.CredentialsP
 		},
 	}
 	modelResultPeriodicLoadingTask := task.NewModelResultPeriodicLoadingTask(supplierName, folderPrefix, getModelResultHandler(supplierName, folderPrefix, region, credentialProvider, modelConfigurationHandler), schedulePeriod)
+	bloomFilterLoader := bloomfilter.NewBloomFilterLoader(getBloomFilterStore(), getDaoFactory(region, credentialProvider), getLocalCacheFactory(), getModelConfigurationHandler(supplierName, folderPrefix, region, credentialProvider), getTimeProvider())
+	bloomFilterPeriodicLoadingTask := task.NewBloomFilterPeriodicLoadingTask(supplierName, folderPrefix, bloomFilterLoader, schedulePeriod)
 	stageTwoTasks := []task.InitializerTask{
 		{
 			Name:                    "ModelResultPeriodicLoadingTask",
 			Task:                    modelResultPeriodicLoadingTask,
+			MaximumAttempts:         5,
+			MinDelayBeforeAttemptMs: int64(1000),
+			MaxDelayBeforeAttemptMs: int64(10000),
+		},
+		{
+			Name:                    "BloomFilterPeriodicLoadingTask",
+			Task:                    bloomFilterPeriodicLoadingTask,
 			MaximumAttempts:         5,
 			MinDelayBeforeAttemptMs: int64(1000),
 			MaxDelayBeforeAttemptMs: int64(10000),
@@ -82,7 +94,14 @@ func NewRequestEvaluator(supplierName string, credentialProvider aws.Credentials
 	modelResultHandler = getModelResultHandler(supplierName, folderPrefix, region, credentialProvider, getModelConfigurationHandler(supplierName, folderPrefix, region, credentialProvider))
 	trafficAllocator = getTrafficAllocator()
 	ruleBasedModelEvaluator := evaluation.NewRuleBasedModelEvaluator(getModelResultHandler(supplierName, folderPrefix, region, credentialProvider, modelConfigurationHandler))
-	requestEvaluator := evaluation.NewRequestEvaluator(supplierName, trafficAllocator, ruleBasedModelEvaluator, getModelConfigurationHandler(supplierName, folderPrefix, region, credentialProvider))
+	bloomFilterProvider := bloomfilter.NewBloomFilterProvider(getBloomFilterStore())
+	bloomFilterModelEvaluator := evaluation.NewBloomFilterModelEvaluator(bloomFilterProvider)
+	delegatingModelEvaluator := evaluation.NewDelegatingModelEvaluator(map[string]interfaces.ModelEvaluator{
+		interfaces.ModelFormatRuleBased:   ruleBasedModelEvaluator,
+		interfaces.ModelFormatBloomFilter: bloomFilterModelEvaluator,
+	})
+	configurableAggregator := evaluation.NewConfigurableAggregator()
+	requestEvaluator := evaluation.NewRequestEvaluator(supplierName, trafficAllocator, delegatingModelEvaluator, getModelConfigurationHandler(supplierName, folderPrefix, region, credentialProvider), configurableAggregator)
 	return requestEvaluator
 }
 
@@ -147,4 +166,11 @@ func getTimeProvider() interfaces.TimeProvider {
 		timeProvider = util.NewRealTimeProvider()
 	})
 	return timeProvider
+}
+
+func getBloomFilterStore() *bloomfilter.BloomFilterStore {
+	bloomFilterStoreOnce.Do(func() {
+		bloomFilterStore = bloomfilter.NewBloomFilterStore()
+	})
+	return bloomFilterStore
 }

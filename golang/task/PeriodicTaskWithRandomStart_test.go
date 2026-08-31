@@ -5,6 +5,7 @@ package task
 
 import (
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -52,9 +53,9 @@ func (suite *PeriodicTaskTestSuite) TestNewPeriodicTaskWithRandomizedStart() {
 }
 
 func (suite *PeriodicTaskTestSuite) TestSchedulePeriodicallyWithRandomizedStart() {
-	executionCount := 0
+	var executionCount int64
 	suite.task.executeTask = func() error {
-		executionCount++
+		atomic.AddInt64(&executionCount, 1)
 		return nil
 	}
 
@@ -68,13 +69,13 @@ func (suite *PeriodicTaskTestSuite) TestSchedulePeriodicallyWithRandomizedStart(
 	close(stopChan)
 	time.Sleep(20 * time.Millisecond) // Give some time for the goroutine to stop
 
-	assert.GreaterOrEqual(suite.T(), executionCount, 1)
+	assert.GreaterOrEqual(suite.T(), atomic.LoadInt64(&executionCount), int64(1))
 }
 
 func (suite *PeriodicTaskTestSuite) TestSchedulePeriodicallyWithRandomizedStartError() {
-	errorCalled := false
+	var errorCalled int64
 	suite.task.executeTask = func() error {
-		errorCalled = true
+		atomic.StoreInt64(&errorCalled, 1)
 		return errors.New("test error")
 	}
 
@@ -85,7 +86,7 @@ func (suite *PeriodicTaskTestSuite) TestSchedulePeriodicallyWithRandomizedStartE
 	// Wait for the error to occur
 	time.Sleep(time.Duration(suite.task.refreshIntervalMs+1000) * time.Millisecond)
 
-	assert.True(suite.T(), errorCalled)
+	assert.Equal(suite.T(), int64(1), atomic.LoadInt64(&errorCalled))
 	select {
 	case <-stopChan:
 		assert.Fail(suite.T(), "StopChan should not be closed")
@@ -95,9 +96,9 @@ func (suite *PeriodicTaskTestSuite) TestSchedulePeriodicallyWithRandomizedStartE
 }
 
 func (suite *PeriodicTaskTestSuite) TestSchedulePeriodicallyWithRandomizedStartPanic() {
-	panicCalled := false
+	var panicCalled int64
 	suite.task.executeTask = func() error {
-		panicCalled = true
+		atomic.StoreInt64(&panicCalled, 1)
 		panic("test panic")
 	}
 
@@ -108,7 +109,7 @@ func (suite *PeriodicTaskTestSuite) TestSchedulePeriodicallyWithRandomizedStartP
 	// Wait for the panic to occur
 	time.Sleep(time.Duration(suite.task.refreshIntervalMs+1000) * time.Millisecond)
 
-	assert.True(suite.T(), panicCalled)
+	assert.Equal(suite.T(), int64(1), atomic.LoadInt64(&panicCalled))
 	select {
 	case <-stopChan:
 		assert.Fail(suite.T(), "StopChan should not be closed")

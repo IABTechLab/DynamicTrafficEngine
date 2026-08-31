@@ -49,34 +49,34 @@ var (
 		"$.imp[0].banner.pos",
 		"$.device.devicetype",
 	}
-	CompleteFieldValueMap = map[string]string{
-		"$.site.publisher.id":  "539014228",
-		"$.imp[0].banner.w":    "970",
-		"$.device.geo.country": "USA",
-		"$.app":                "",
-		"$.imp[0].video.h":     "",
-		"$.imp[0].video.pos":   "",
-		"$.id":                 "e0371864-238f-41b1-a544-59b4b6a602ec",
-		"$.imp[0].banner.h":    "250",
-		"$.imp[0].banner.pos":  "1",
-		"$.device.devicetype":  "2",
-		"$.imp[0].video":       "",
-		"$.app.publisher.id":   "",
-		"$.imp[0].video.w":     "",
+	CompleteFieldValueMap = map[string][]string{
+		"$.site.publisher.id":  {"539014228"},
+		"$.imp[0].banner.w":    {"970"},
+		"$.device.geo.country": {"USA"},
+		"$.app":                {},
+		"$.imp[0].video.h":     {},
+		"$.imp[0].video.pos":   {},
+		"$.id":                 {"e0371864-238f-41b1-a544-59b4b6a602ec"},
+		"$.imp[0].banner.h":    {"250"},
+		"$.imp[0].banner.pos":  {"1"},
+		"$.device.devicetype":  {"2"},
+		"$.imp[0].video":       {},
+		"$.app.publisher.id":   {},
+		"$.imp[0].video.w":     {},
 	}
-	IncompleteFieldValueMap = map[string]string{
-		"$.site.publisher.id":  "539014228",
-		"$.imp[0].banner.w":    "970",
-		"$.device.geo.country": "USA",
-		"$.app":                "",
-		"$.imp[0].video.h":     "",
-		"$.imp[0].video.pos":   "",
-		"$.id":                 "e0371864-238f-41b1-a544-59b4b6a602ec",
-		"$.imp[0].banner.h":    "250",
-		"$.imp[0].banner.pos":  "1",
-		"$.imp[0].video":       "",
-		"$.app.publisher.id":   "",
-		"$.imp[0].video.w":     "",
+	IncompleteFieldValueMap = map[string][]string{
+		"$.site.publisher.id":  {"539014228"},
+		"$.imp[0].banner.w":    {"970"},
+		"$.device.geo.country": {"USA"},
+		"$.app":                {},
+		"$.imp[0].video.h":     {},
+		"$.imp[0].video.pos":   {},
+		"$.id":                 {"e0371864-238f-41b1-a544-59b4b6a602ec"},
+		"$.imp[0].banner.h":    {"250"},
+		"$.imp[0].banner.pos":  {"1"},
+		"$.imp[0].video":       {},
+		"$.app.publisher.id":   {},
+		"$.imp[0].video.w":     {},
 	}
 )
 
@@ -103,6 +103,7 @@ func (suite *RequestEvaluatorTestSuite) SetupTest() {
 		suite.mockTrafficAllocator,
 		suite.mockModelEvaluator,
 		suite.mockModelConfigHandler,
+		NewConfigurableAggregator(),
 	)
 
 	dir, err := os.Getwd()
@@ -128,7 +129,7 @@ func (suite *RequestEvaluatorTestSuite) TestEvaluate_Success() {
 		},
 			nil,
 		).
-		Once()
+		Times(2)
 	suite.mockTrafficAllocationContext.EXPECT().
 		GetModelIdentifiers().
 		Return([]string{ModelIdentifierV2}).
@@ -202,7 +203,7 @@ func (suite *RequestEvaluatorTestSuite) TestEvaluateMap_Success() {
 		},
 			nil,
 		).
-		Once()
+		Times(2)
 	suite.mockTrafficAllocationContext.EXPECT().
 		GetModelIdentifiers().
 		Return([]string{ModelIdentifierV2}).
@@ -411,8 +412,8 @@ func (suite *RequestEvaluatorTestSuite) TestParse_ReturnErr_ErrInAllUniqueFeatur
 
 func (suite *RequestEvaluatorTestSuite) TestSetupOpenRtbRequestID_Success() {
 	context := &interfaces.Context{}
-	requestFieldValueMap := map[string]string{
-		"$.id": "e0371864-238f-41b1-a544-59b4b6a602ec",
+	requestFieldValueMap := map[string][]string{
+		"$.id": {"e0371864-238f-41b1-a544-59b4b6a602ec"},
 	}
 
 	suite.evaluator.setupOpenRtbRequestID(context, requestFieldValueMap)
@@ -422,7 +423,7 @@ func (suite *RequestEvaluatorTestSuite) TestSetupOpenRtbRequestID_Success() {
 
 func (suite *RequestEvaluatorTestSuite) TestSetupOpenRtbRequestID_UnknownRequestId() {
 	context := &interfaces.Context{}
-	requestFieldValueMap := map[string]string{}
+	requestFieldValueMap := map[string][]string{}
 
 	suite.evaluator.setupOpenRtbRequestID(context, requestFieldValueMap)
 
@@ -669,4 +670,361 @@ func (suite *RequestEvaluatorTestSuite) TestAggregateModelEvaluationResultsOnMax
 
 	suite.Nil(aggregatedModelEvaluationResult, "Aggregated model evaluation result should be nil")
 	suite.EqualError(err, "no models have been evaluated for the experiment [DemandDrivenTrafficEvaluatorSoftFilter]", "Error should not be nil")
+}
+
+func (suite *RequestEvaluatorTestSuite) TestAddMissingEntriesToMap() {
+	tests := []struct {
+		name           string
+		inputMap       map[string][]string
+		uniqueFields   []string
+		expectedResult map[string][]string
+		description    string
+	}{
+		{
+			name: "present key is copied from input map",
+			inputMap: map[string][]string{
+				"$.site.publisher.id":  {"539014228"},
+				"$.device.geo.country": {"USA"},
+			},
+			uniqueFields: []string{"$.site.publisher.id", "$.device.geo.country"},
+			expectedResult: map[string][]string{
+				"$.site.publisher.id":  {"539014228"},
+				"$.device.geo.country": {"USA"},
+			},
+		},
+		{
+			name: "missing key gets empty slice",
+			inputMap: map[string][]string{
+				"$.site.publisher.id": {"539014228"},
+			},
+			uniqueFields: []string{"$.site.publisher.id", "$.device.geo.country"},
+			expectedResult: map[string][]string{
+				"$.site.publisher.id":  {"539014228"},
+				"$.device.geo.country": {},
+			},
+		},
+		{
+			name: "nil slice treated as missing",
+			inputMap: map[string][]string{
+				"$.site.publisher.id":  {"539014228"},
+				"$.device.geo.country": nil,
+			},
+			uniqueFields: []string{"$.site.publisher.id", "$.device.geo.country"},
+			expectedResult: map[string][]string{
+				"$.site.publisher.id":  {"539014228"},
+				"$.device.geo.country": {},
+			},
+		},
+		{
+			name: "all fields present are copied",
+			inputMap: map[string][]string{
+				"$.site.publisher.id":  {"539014228"},
+				"$.device.geo.country": {"USA"},
+				"$.imp[0].banner.w":    {"970", "728"},
+			},
+			uniqueFields: []string{"$.site.publisher.id", "$.device.geo.country", "$.imp[0].banner.w"},
+			expectedResult: map[string][]string{
+				"$.site.publisher.id":  {"539014228"},
+				"$.device.geo.country": {"USA"},
+				"$.imp[0].banner.w":    {"970", "728"},
+			},
+		},
+		{
+			name:         "all fields missing get empty slices",
+			inputMap:     map[string][]string{},
+			uniqueFields: []string{"$.site.publisher.id", "$.device.geo.country", "$.imp[0].banner.w"},
+			expectedResult: map[string][]string{
+				"$.site.publisher.id":  {},
+				"$.device.geo.country": {},
+				"$.imp[0].banner.w":    {},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		suite.Run(tt.name, func() {
+			suite.mockModelConfigHandler.EXPECT().
+				GetAllUniqueFeatureFields().
+				Return(tt.uniqueFields, nil).
+				Once()
+
+			result, err := suite.evaluator.addMissingEntriesToMap(tt.inputMap)
+
+			suite.NoError(err)
+			suite.Equal(tt.expectedResult, result)
+		})
+	}
+}
+
+func (suite *RequestEvaluatorTestSuite) TestExtractWildcardField() {
+	jsonWithDeals := `{"imp":[{"pmp":{"deals":[{"id":"deal-1","bidfloor":1.5},{"id":"deal-2","bidfloor":2.0},{"id":"deal-3","bidfloor":3.0}]}}]}`
+
+	tests := []struct {
+		name      string
+		jsonData  string
+		fieldPath string
+		expected  []string
+	}{
+		{
+			name:      "wildcard path extracts all deal IDs from deals array",
+			jsonData:  jsonWithDeals,
+			fieldPath: "$.imp[0].pmp.deals[*].id",
+			expected:  []string{"deal-1", "deal-2", "deal-3"},
+		},
+		{
+			name:      "wildcard path on empty array returns empty slice",
+			jsonData:  `{"imp":[{"pmp":{"deals":[]}}]}`,
+			fieldPath: "$.imp[0].pmp.deals[*].id",
+			expected:  []string{},
+		},
+		{
+			name:      "wildcard path on non-existent parent path returns empty slice",
+			jsonData:  `{"imp":[{"pmp":{}}]}`,
+			fieldPath: "$.imp[0].pmp.deals[*].id",
+			expected:  []string{},
+		},
+		{
+			name:      "malformed JSON returns empty slice",
+			jsonData:  `{not valid json`,
+			fieldPath: "$.imp[0].pmp.deals[*].id",
+			expected:  []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		suite.Run(tt.name, func() {
+			result := suite.evaluator.extractWildcardField([]byte(tt.jsonData), tt.fieldPath)
+			if len(tt.expected) == 0 {
+				suite.Empty(result)
+			} else {
+				suite.Equal(tt.expected, result)
+			}
+		})
+	}
+}
+
+func (suite *RequestEvaluatorTestSuite) TestEvaluate_UsesConfigurableAggregator_WhenAggregationSchemaIsNonNil() {
+	// When AggregationSchema is configured, ConfigurableAggregator should be used
+	aggregationSchema := &interfaces.AggregationNode{
+		Operator: interfaces.AggregationOperatorOR,
+		Conditions: []interfaces.AggregationNode{
+			{ModelIdentifier: ModelIdentifierV2},
+		},
+	}
+
+	suite.mockTrafficAllocator.EXPECT().
+		GetTrafficAllocationContext().
+		Return(suite.mockTrafficAllocationContext).
+		Once()
+	suite.mockModelConfigHandler.EXPECT().
+		GetAllUniqueFeatureFields().
+		Return(AllUniqueFeatureFields, nil).
+		Once()
+	suite.mockTrafficAllocationContext.EXPECT().
+		GetModelIdentifiers().
+		Return([]string{ModelIdentifierV2}).
+		Once()
+	suite.mockModelConfigHandler.EXPECT().
+		Provide().
+		Return(&suite.modelConfiguration, nil).
+		Once()
+
+	modelDefinition := suite.modelConfiguration.ModelDefinitionByIdentifier[ModelIdentifierV2]
+	suite.mockModelEvaluator.EXPECT().
+		Evaluate(mock.Anything).
+		Return(&interfaces.ModelEvaluatorOutput{
+			Context: interfaces.Context{},
+			Status:  interfaces.ModelEvaluationStatusSuccess,
+			ModelResult: interfaces.ModelResult{
+				Value: 0.0,
+				Key:   "modelResultKey",
+			},
+			ModelDefinition: modelDefinition,
+			ModelFeatures:   []interfaces.ModelFeature{{}},
+		}, nil).
+		Once()
+
+	// First call: from Evaluate() to check AggregationSchema and determine routing
+	suite.mockTrafficAllocationContext.EXPECT().
+		GetExperimentDefinitionByType(modelfeature.ExperimentTypeSoftFilter).
+		Return(&interfaces.ExperimentDefinition{
+			Name:              ExperimentName,
+			Type:              modelfeature.ExperimentTypeSoftFilter,
+			AggregationSchema: aggregationSchema,
+		}, nil).
+		Once()
+	// Second call: from ConfigurableAggregator.Aggregate() to get experiment metadata
+	suite.mockTrafficAllocationContext.EXPECT().
+		GetExperimentDefinitionByType(modelfeature.ExperimentTypeSoftFilter).
+		Return(&interfaces.ExperimentDefinition{
+			Name:              ExperimentName,
+			Type:              modelfeature.ExperimentTypeSoftFilter,
+			AggregationSchema: aggregationSchema,
+		}, nil).
+		Once()
+	suite.mockTrafficAllocationContext.EXPECT().
+		GetTreatmentCodeInInt(ExperimentName).
+		Return(TreatmentCodeInIntZero).
+		Once()
+	suite.mockTrafficAllocationContext.EXPECT().
+		GetTreatmentCode(ExperimentName).
+		Return(TreatmentT).
+		Once()
+
+	result := suite.evaluator.Evaluate(&suite.requestInput)
+
+	suite.NotNil(result)
+	suite.Equal(1, len(result.Response.Slots), "Slots size should be 1")
+	// OR node with a single child at 0.0 → aggregated score is 0.0
+	suite.Equal(float32(0.0), result.Response.Slots[TreatmentCodeInIntZero].FilterDecision, "FilterDecision should be 0.0 from configurable aggregator")
+	suite.Equal(`{"amazontest":{"decision":0}}`, result.Response.Slots[TreatmentCodeInIntZero].Ext)
+	suite.Equal(`{"amazontest":{"learning":0}}`, result.Response.Ext)
+}
+
+func (suite *RequestEvaluatorTestSuite) TestEvaluate_UsesMaxAggregation_WhenAggregationSchemaIsNil() {
+	// When AggregationSchema is nil, max-aggregation is used (existing behavior)
+	suite.mockTrafficAllocator.EXPECT().
+		GetTrafficAllocationContext().
+		Return(suite.mockTrafficAllocationContext).
+		Once()
+	suite.mockModelConfigHandler.EXPECT().
+		GetAllUniqueFeatureFields().
+		Return(AllUniqueFeatureFields, nil).
+		Once()
+	suite.mockTrafficAllocationContext.EXPECT().
+		GetModelIdentifiers().
+		Return([]string{ModelIdentifierV2}).
+		Once()
+	suite.mockModelConfigHandler.EXPECT().
+		Provide().
+		Return(&suite.modelConfiguration, nil).
+		Once()
+
+	modelDefinition := suite.modelConfiguration.ModelDefinitionByIdentifier[ModelIdentifierV2]
+	suite.mockModelEvaluator.EXPECT().
+		Evaluate(mock.Anything).
+		Return(&interfaces.ModelEvaluatorOutput{
+			Context: interfaces.Context{},
+			Status:  interfaces.ModelEvaluationStatusSuccess,
+			ModelResult: interfaces.ModelResult{
+				Value: 0.0,
+				Key:   "modelResultKey",
+			},
+			ModelDefinition: modelDefinition,
+			ModelFeatures:   []interfaces.ModelFeature{{}},
+		}, nil).
+		Once()
+
+	// First call: from Evaluate() - returns nil AggregationSchema so max-aggregation is used
+	suite.mockTrafficAllocationContext.EXPECT().
+		GetExperimentDefinitionByType(modelfeature.ExperimentTypeSoftFilter).
+		Return(&interfaces.ExperimentDefinition{
+			Name:              ExperimentName,
+			Type:              modelfeature.ExperimentTypeSoftFilter,
+			AggregationSchema: nil,
+		}, nil).
+		Once()
+	// Second call: from aggregateModelEvaluationResultsOnMax
+	suite.mockTrafficAllocationContext.EXPECT().
+		GetExperimentDefinitionByType(modelfeature.ExperimentTypeSoftFilter).
+		Return(&interfaces.ExperimentDefinition{
+			Name:              ExperimentName,
+			Type:              modelfeature.ExperimentTypeSoftFilter,
+			AggregationSchema: nil,
+		}, nil).
+		Once()
+	suite.mockTrafficAllocationContext.EXPECT().
+		GetModelsByExperiment().
+		Return(map[string][]string{ExperimentName: {ModelIdentifierV2}}).
+		Once()
+	suite.mockTrafficAllocationContext.EXPECT().
+		GetTreatmentCodeInInt(ExperimentName).
+		Return(TreatmentCodeInIntZero).
+		Once()
+	suite.mockTrafficAllocationContext.EXPECT().
+		GetTreatmentCode(ExperimentName).
+		Return(TreatmentT).
+		Once()
+
+	result := suite.evaluator.Evaluate(&suite.requestInput)
+
+	suite.NotNil(result)
+	suite.Equal(1, len(result.Response.Slots), "Slots size should be 1")
+	suite.Equal(float32(0.0), result.Response.Slots[TreatmentCodeInIntZero].FilterDecision, "FilterDecision should be 0.0 from max-aggregation")
+	suite.Equal(`{"amazontest":{"decision":0}}`, result.Response.Slots[TreatmentCodeInIntZero].Ext)
+	suite.Equal(`{"amazontest":{"learning":0}}`, result.Response.Ext)
+}
+
+func (suite *RequestEvaluatorTestSuite) TestEvaluate_PanicRecovery_ReturnsDefaultResponse_WithBloomFilterModels() {
+	// Panic during model evaluation still returns DefaultResponse, even when bloom filter models are involved
+	suite.mockTrafficAllocator.EXPECT().
+		GetTrafficAllocationContext().
+		Return(suite.mockTrafficAllocationContext).
+		Once()
+	suite.mockModelConfigHandler.EXPECT().
+		GetAllUniqueFeatureFields().
+		Return(AllUniqueFeatureFields, nil).
+		Once()
+	suite.mockTrafficAllocationContext.EXPECT().
+		GetModelIdentifiers().
+		Return([]string{ModelIdentifierV2}).
+		Once()
+	suite.mockModelConfigHandler.EXPECT().
+		Provide().
+		Return(&interfaces.ModelConfiguration{
+			ModelDefinitionByIdentifier: map[string]interfaces.ModelDefinition{
+				ModelIdentifierV2: {
+					Identifier:  ModelIdentifierV2,
+					ModelFormat: interfaces.ModelFormatBloomFilter,
+				},
+			},
+		}, nil).
+		Once()
+
+	// The model evaluator panics during evaluation
+	suite.mockModelEvaluator.EXPECT().
+		Evaluate(mock.Anything).
+		Panic("bloom filter model evaluator panics").
+		Once()
+
+	result := suite.evaluator.Evaluate(&suite.requestInput)
+
+	suite.NotNil(result)
+	suite.Equal(DefaultResponse, result.Response, "DefaultResponse should be returned after panic recovery")
+}
+
+func (suite *RequestEvaluatorTestSuite) TestParse_MultiValueExtraction() {
+	tests := []struct {
+		name          string
+		uniqueFields  []string
+		expectedField string
+		expectedValue []string
+	}{
+		{
+			name:          "scalar field wraps value in single-element slice",
+			uniqueFields:  []string{"$.site.publisher.id"},
+			expectedField: "$.site.publisher.id",
+			expectedValue: []string{"539014228"},
+		},
+		{
+			name:          "missing field returns empty slice",
+			uniqueFields:  []string{"$.nonexistent.field"},
+			expectedField: "$.nonexistent.field",
+			expectedValue: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		suite.Run(tt.name, func() {
+			suite.mockModelConfigHandler.EXPECT().
+				GetAllUniqueFeatureFields().
+				Return(tt.uniqueFields, nil).
+				Once()
+
+			fieldValueMap, err := suite.evaluator.parse(suite.requestInput.OpenRtbRequest, []string{})
+
+			suite.NoError(err)
+			suite.Equal(tt.expectedValue, fieldValueMap[tt.expectedField])
+		})
+	}
 }

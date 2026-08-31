@@ -19,11 +19,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.StringUtils;
-
-import static com.amazon.demanddriventrafficevaluator.util.ResponseUtil.EXTENSION_KEYWORD_DECISION;
-import static com.amazon.demanddriventrafficevaluator.util.ResponseUtil.EXTENSION_KEYWORD_LEARNING;
 
 /**
  * This class implements the BidRequestEvaluator interface to evaluate bid requests
@@ -45,9 +43,9 @@ public class BidRequestEvaluatorOnRuleBasedModel implements BidRequestEvaluator 
     static final Response DEFAULT_RESPONSE = Response.builder()
             .slots(List.of(Slot.builder()
                     .filterDecision(DEFAULT_FILTER_RECOMMENDATION)
-                    .ext(ResponseUtil.buildExtension(Map.of(EXTENSION_KEYWORD_DECISION, DEFAULT_FILTER_RECOMMENDATION)))
+                    .decision(DEFAULT_FILTER_RECOMMENDATION)
                     .build()))
-            .ext(ResponseUtil.buildExtension(Map.of(EXTENSION_KEYWORD_LEARNING, DEFAULT_LEARNING)))
+            .learning(DEFAULT_LEARNING)
             .build();
 
     private final String sspIdentifier;
@@ -187,10 +185,9 @@ public class BidRequestEvaluatorOnRuleBasedModel implements BidRequestEvaluator 
     }
 
     private Response buildResponse(EvaluationContext context) {
-        AggregatedModelEvaluationResult aggregatedModelEvaluationResult = context.getAggregatedModelEvaluationResult();
         return Response.builder()
                 .slots(ResponseUtil.buildSlots(context))
-                .ext(ResponseUtil.buildExtension(Map.of(EXTENSION_KEYWORD_LEARNING, aggregatedModelEvaluationResult.getTreatmentCodeInInt())))
+                .learning(context.getAggregatedModelEvaluationResult().getTreatmentCodeInInt())
                 .build();
     }
 }

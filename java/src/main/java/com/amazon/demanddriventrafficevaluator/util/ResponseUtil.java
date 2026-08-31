@@ -9,13 +9,17 @@ import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.ModelEvaluat
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.ModelEvaluatorOutput;
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.Signal;
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.Slot;
+import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.protobuf.ResponseMetadata;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+
+import com.google.protobuf.InvalidProtocolBufferException;
 import lombok.extern.log4j.Log4j2;
 
 /**
@@ -35,6 +39,9 @@ public class ResponseUtil {
 
     private static final ObjectMapper mapper = new ObjectMapper();
 
+    private static final Base64.Encoder B64_ENCODER = Base64.getUrlEncoder().withoutPadding();
+    private static final Base64.Decoder B64_DECODER = Base64.getUrlDecoder();
+
     /**
      * Builds a list of Slot objects based on the evaluation context.
      *
@@ -45,7 +52,7 @@ public class ResponseUtil {
         AggregatedModelEvaluationResult aggregatedModelEvaluationResult = context.getAggregatedModelEvaluationResult();
         return List.of(Slot.builder()
                 .filterDecision(aggregatedModelEvaluationResult.getScoreWithTreatment())
-                .ext(buildExtension(Map.of(EXTENSION_KEYWORD_DECISION, aggregatedModelEvaluationResult.getScore())))
+                .decision(aggregatedModelEvaluationResult.getScore())
                 .build());
     }
 
@@ -108,5 +115,32 @@ public class ResponseUtil {
         String modelLevelDebugInfo = modelLevelDebugInfoBuilder.toString();
 
         return requestLevelDebugInfo + modelLevelDebugInfo;
+    }
+
+    /**
+     * Encodes a ResponseMetadata protobuf as a URI-safe base64 string.
+     * This provides an alternate method of passing amazonTest data via HTTP header.
+     *
+     * @param response protobuf representation of evaluation response
+     * @return URI-safe base64 encoded string (without padding)
+     */
+    public static String encodedResponseMetadata(ResponseMetadata response) {
+        return B64_ENCODER.encodeToString(response.toByteArray());
+    }
+
+    /**
+     * Decodes a base64-encoded string to a protobuf ResponseMetadata.
+     *
+     * @param response base64-encoded string to parse
+     * @return decoded and parsed ResponseMetadata
+     * @throws IllegalArgumentException when invalid string is encountered
+     */
+    public static ResponseMetadata decodeResponseMetadata(String response) {
+        try {
+            return ResponseMetadata.parseFrom(B64_DECODER.decode(response));
+        } catch (InvalidProtocolBufferException e) {
+            throw new IllegalArgumentException(
+                    "Encoded bytes are not a valid base64 representation of a ResponseMetadata", e);
+        }
     }
 }

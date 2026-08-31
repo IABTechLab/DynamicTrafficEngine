@@ -21,6 +21,13 @@ var ModelTypeValue = map[interfaces.ModelType]float32{
 	HighValue: 1.0,
 }
 
+// ModelTypeDefaultValue maps ModelType to the default score returned on cache miss.
+// This is the INVERSE of ModelTypeValue (which maps to the cache-HIT value).
+var ModelTypeDefaultValue = map[interfaces.ModelType]float32{
+	LowValue:  1.0,
+	HighValue: 0.0,
+}
+
 /**
 Extractor
 */
@@ -39,17 +46,19 @@ Transformer
 type Transformer func(modelFeature *interfaces.ModelFeature) (*interfaces.ModelFeature, error)
 
 const (
-	Exists            interfaces.TransformerName = "Exists"
-	GetFirstNotEmpty  interfaces.TransformerName = "GetFirstNotEmpty"
-	ApplyMappings     interfaces.TransformerName = "ApplyMappings"
-	ConcatenateByPair interfaces.TransformerName = "ConcatenateByPair"
+	Exists              interfaces.TransformerName = "Exists"
+	GetFirstNotEmpty    interfaces.TransformerName = "GetFirstNotEmpty"
+	ApplyMappings       interfaces.TransformerName = "ApplyMappings"
+	ConcatenateByPair   interfaces.TransformerName = "ConcatenateByPair"
+	IncludeDefaultValue interfaces.TransformerName = "IncludeDefaultValue"
 )
 
 var TransformerMap = map[interfaces.TransformerName]Transformer{
-	Exists:            ExistsTransformer,
-	GetFirstNotEmpty:  GetFirstNotEmptyTransformer,
-	ApplyMappings:     ApplyMappingsTransformer,
-	ConcatenateByPair: ConcatenateByPairTransformer,
+	Exists:              ExistsTransformer,
+	GetFirstNotEmpty:    GetFirstNotEmptyTransformer,
+	ApplyMappings:       ApplyMappingsTransformer,
+	ConcatenateByPair:   ConcatenateByPairTransformer,
+	IncludeDefaultValue: IncludeDefaultValueTransformer,
 }
 
 // A transformer that checks for the existence of non-empty values in a ModelFeature.
@@ -136,6 +145,31 @@ func ConcatenateByPairTransformer(modelFeature *interfaces.ModelFeature) (*inter
 	return &interfaces.ModelFeature{
 		Configuration: modelFeature.Configuration,
 		Values:        transformedValues,
+	}, nil
+}
+
+// A transformer that filters empty values and appends a configured default value.
+//
+// This function transforms a ModelFeature by removing all empty string values from
+// the values list while preserving the relative order of non-empty values. If the
+// FeatureConfiguration has a non-empty MappingDefaultValue, it is appended exactly
+// once to the end of the filtered values list.
+func IncludeDefaultValueTransformer(modelFeature *interfaces.ModelFeature) (*interfaces.ModelFeature, error) {
+	var filtered []string
+	for _, value := range modelFeature.Values {
+		if value != "" {
+			filtered = append(filtered, value)
+		}
+	}
+
+	defaultValue := modelFeature.Configuration.MappingDefaultValue
+	if defaultValue != "" {
+		filtered = append(filtered, defaultValue)
+	}
+
+	return &interfaces.ModelFeature{
+		Configuration: modelFeature.Configuration,
+		Values:        filtered,
 	}, nil
 }
 

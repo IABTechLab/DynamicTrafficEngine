@@ -6,37 +6,35 @@ package evaluation
 import (
 	"fmt"
 
+	"golang.a2z.com/demanddriventrafficevaluator/bloomfilter"
 	"golang.a2z.com/demanddriventrafficevaluator/interfaces"
 	"golang.a2z.com/demanddriventrafficevaluator/modelfeature"
 )
 
-const HighValueDefaultScore = 1.0
-
-// RuleBasedModelEvaluator provides a filter recommendation for OpenRTB requests for a rules-based model.
-//
-// A rules-based model take in a set of features derived from the OpenRTB request, and genereate a string tuple
-// based on the model configuration. The tuple is used to fetch the value metric calculated by the model, which
-// is then used to make a filter recommendation.
-type RuleBasedModelEvaluator struct {
-	modelResultHandler interfaces.ModelResultHandlerInterface
+// BloomFilterModelEvaluator provides a filter recommendation for OpenRTB requests
+// using bloom filter models. Feature extraction is identical to RuleBasedModelEvaluator.
+type BloomFilterModelEvaluator struct {
+	bloomFilterProvider bloomfilter.BloomFilterProviderInterface
 }
 
-func NewRuleBasedModelEvaluator(modelResultHandler interfaces.ModelResultHandlerInterface) *RuleBasedModelEvaluator {
-	return &RuleBasedModelEvaluator{
-		modelResultHandler: modelResultHandler,
+// NewBloomFilterModelEvaluator creates a new BloomFilterModelEvaluator with the given provider.
+func NewBloomFilterModelEvaluator(provider bloomfilter.BloomFilterProviderInterface) *BloomFilterModelEvaluator {
+	return &BloomFilterModelEvaluator{
+		bloomFilterProvider: provider,
 	}
 }
 
-func (t *RuleBasedModelEvaluator) Evaluate(input interfaces.ModelEvaluatorInput) (*interfaces.ModelEvaluatorOutput, error) {
+// Evaluate extracts features from the OpenRTB request and performs a bloom filter lookup.
+func (e *BloomFilterModelEvaluator) Evaluate(input interfaces.ModelEvaluatorInput) (*interfaces.ModelEvaluatorOutput, error) {
 	modelDefinition := input.ModelDefinition
-	modelFeatures, err := t.getFeatures(input)
+	modelFeatures, err := e.getFeatures(input)
 	if err != nil {
 		return &interfaces.ModelEvaluatorOutput{
 			Status: interfaces.ModelEvaluationStatusError,
 		}, fmt.Errorf("error getting modelFeatures: %w", err)
 	}
 	Logger.Debug().Msgf("modelFeatures: %+v", modelFeatures)
-	modelResult, err := t.modelResultHandler.Provide(modelDefinition.Identifier, modelFeatures, t.getDefaultValue(modelDefinition.Type))
+	modelResult, err := e.bloomFilterProvider.Provide(modelDefinition.Identifier, modelFeatures, e.getDefaultValue(modelDefinition.Type))
 	Logger.Debug().Msgf("modelResult: %+v", modelResult)
 	if err != nil {
 		return &interfaces.ModelEvaluatorOutput{
@@ -56,14 +54,15 @@ func (t *RuleBasedModelEvaluator) Evaluate(input interfaces.ModelEvaluatorInput)
 	return output, nil
 }
 
-func (t *RuleBasedModelEvaluator) getFeatures(input interfaces.ModelEvaluatorInput) ([]interfaces.ModelFeature, error) {
+// getFeatures extracts and transforms features identically to RuleBasedModelEvaluator.
+func (e *BloomFilterModelEvaluator) getFeatures(input interfaces.ModelEvaluatorInput) ([]interfaces.ModelFeature, error) {
 	modelDefinition := input.ModelDefinition
 	featureConfigurations := modelDefinition.Features
 	Logger.Debug().Msgf("featureConfigurations: %+v", featureConfigurations)
 	featureFieldValueMap := input.FeatureFieldValueMap
 	var features []interfaces.ModelFeature
 	for _, featureConfiguration := range featureConfigurations {
-		fieldsValues, err := t.getFieldsValues(featureConfiguration.Fields, featureFieldValueMap)
+		fieldsValues, err := e.getFieldsValues(featureConfiguration.Fields, featureFieldValueMap)
 		if err != nil {
 			return nil, fmt.Errorf("error getting fields values [%v] due to the error %v", featureConfiguration.Fields, err)
 		}
@@ -81,7 +80,8 @@ func (t *RuleBasedModelEvaluator) getFeatures(input interfaces.ModelEvaluatorInp
 	return features, nil
 }
 
-func (t *RuleBasedModelEvaluator) getFieldsValues(fields []string, valueMap map[string][]string) ([]string, error) {
+// getFieldsValues retrieves values for each field from the feature field value map.
+func (e *BloomFilterModelEvaluator) getFieldsValues(fields []string, valueMap map[string][]string) ([]string, error) {
 	var fieldsValues []string
 	for _, field := range fields {
 		fieldValues, exists := valueMap[field]
@@ -93,7 +93,8 @@ func (t *RuleBasedModelEvaluator) getFieldsValues(fields []string, valueMap map[
 	return fieldsValues, nil
 }
 
-func (t *RuleBasedModelEvaluator) getDefaultValue(modelType interfaces.ModelType) float32 {
+// getDefaultValue returns the default score for a given model type.
+func (e *BloomFilterModelEvaluator) getDefaultValue(modelType interfaces.ModelType) float32 {
 	defaultValue, exists := modelfeature.ModelTypeDefaultValue[modelType]
 	if !exists {
 		return 1.0
