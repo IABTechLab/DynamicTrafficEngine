@@ -84,7 +84,7 @@ func ExistsTransformer(modelFeature *interfaces.ModelFeature) (*interfaces.Model
 // A transformer that retrieves the first non-empty value from a ModelFeature.
 //
 // This function transforms a ModelFeature by selecting the first non-null and non-empty
-// value from its list of values. If no such value is found, it returns an  empty string.
+// value from its list of values. If no such value is found, it returns an empty string.
 func GetFirstNotEmptyTransformer(modelFeature *interfaces.ModelFeature) (*interfaces.ModelFeature, error) {
 	var firstNotEmpty string
 	for _, value := range modelFeature.Values {
