@@ -15,12 +15,12 @@ plugins {
     // Apply the java-library plugin for API and implementation separation.
     `java-library`
     id("com.google.protobuf") version "0.9.4"
-    id("io.freefair.lombok") version "8.6"
-    id("com.github.johnrengelman.shadow") version "7.1.2"
+    id("io.freefair.lombok") version "9.5.0"
+    id("com.gradleup.shadow") version "9.6.1"
     jacoco
-    id("com.github.spotbugs") version "6.0.7"
+    id("com.github.spotbugs") version "6.5.11"
     checkstyle
-    id("org.cyclonedx.bom") version "1.10.0"
+    id("org.cyclonedx.bom") version "3.4.1"
 }
 
 repositories {
@@ -51,7 +51,7 @@ dependencies {
     implementation("org.apache.commons:commons-lang3:3.0")
     implementation("com.jayway.jsonpath:json-path:2.9.0")
     implementation("io.github.resilience4j:resilience4j-retry:2.2.0")
-    implementation(enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.17.0"))
+    implementation(platform("com.fasterxml.jackson:jackson-bom:2.17.0"))
     implementation("com.fasterxml.jackson.core:jackson-core")
     implementation("com.fasterxml.jackson.core:jackson-annotations")
     implementation("com.fasterxml.jackson.core:jackson-databind")
@@ -77,16 +77,8 @@ protobuf {
     }
 }
 
-sourceSets {
-    main {
-        java {
-            srcDir(layout.buildDirectory.dir("generated/source/proto/main/java"))
-        }
-    }
-}
-
 jacoco {
-    toolVersion = "0.8.9" // Use the latest version available
+    toolVersion = "0.8.15" // Use the latest version available
 }
 
 tasks.jacocoTestReport {
@@ -130,7 +122,7 @@ tasks.jacocoTestCoverageVerification {
 }
 
 spotbugs {
-    toolVersion.set("4.8.3")
+    toolVersion.set("4.10.2")
     ignoreFailures.set(false)
     showProgress.set(true)
     effort.set(com.github.spotbugs.snom.Effort.MAX)
@@ -173,7 +165,7 @@ tasks.check {
 testing {
     suites {
         // Configure the built-in test suite
-        val test by getting(JvmTestSuite::class) {
+        val test = getByName<JvmTestSuite>("test") {
             // Use JUnit4 test framework
             useJUnitJupiter()
         }
@@ -209,16 +201,14 @@ tasks.javadoc {
     }
 }
 
+java {
+        withJavadocJar()
+        withSourcesJar()
+}
+
 tasks {
-    jar {
-        archiveBaseName.set("DemandDrivenTrafficEvaluator")
-        archiveClassifier.set("core")
-        archiveVersion.set("2.1.0") // Set your library version
-    }
     named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
-        archiveBaseName.set("DemandDrivenTrafficEvaluator")
         archiveClassifier.set("fat")
-        archiveVersion.set("2.1.0") // Set your library version
         destinationDirectory.set(layout.buildDirectory.dir("libs"))
         configurations = listOf(project.configurations.runtimeClasspath.get())
 
