@@ -178,6 +178,49 @@ func TestTrafficAllocatorSuite(t *testing.T) {
 	suite.Run(t, new(TrafficAllocatorTestSuite))
 }
 
+func TestTrafficAllocatorConcurrency(t *testing.T) {
+	ta := NewTrafficAllocator()
+	cfg := &interfaces.ExperimentConfiguration{
+		ExperimentDefinitionByName: map[string]interfaces.ExperimentDefinition{
+			"exp": {
+				Treatments: []interfaces.Treatment{
+					{TreatmentCode: "T", Weight: 50},
+					{TreatmentCode: "C", Weight: 50},
+				},
+			},
+		},
+	}
+	if err := ta.UpdateConfiguration(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 10000; i++ {
+			_ = ta.UpdateConfiguration(cfg)
+		}
+		close(done)
+	}()
+	for {
+		select {
+		case <-done:
+			return
+		default:
+			_ = ta.GetTrafficAllocationContext()
+		}
+	}
+}
+
+func TestGetTrafficAllocationContextNilConfiguration(t *testing.T) {
+	ctx := NewTrafficAllocator().GetTrafficAllocationContext()
+	if ctx == nil {
+		t.Fatal("expected empty context, got nil")
+	}
+	if got := len(ctx.GetExperimentArrangement()); got != 0 {
+		t.Fatalf("expected empty arrangement, got %d", got)
+	}
+}
+
 type TrafficAllocationContextTestSuite struct {
 	suite.Suite
 	context *TrafficAllocationContext
