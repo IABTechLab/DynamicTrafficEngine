@@ -64,27 +64,36 @@ func (t *TrafficAllocator) UpdateConfiguration(experimentConfiguration *interfac
 }
 
 func (t *TrafficAllocator) GetTrafficAllocationContext() interfaces.TrafficAllocationContextInterface {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	cfg := t.experimentConfiguration
+	if cfg == nil {
+		return NewTrafficAllocationContext(make(map[string]string), &interfaces.ExperimentConfiguration{})
+	}
+
 	experimentArrangement := make(map[string]string)
-	for experimentName, experimentDef := range t.experimentConfiguration.ExperimentDefinitionByName {
+	for experimentName, experimentDef := range cfg.ExperimentDefinitionByName {
 		thresholds, exist := t.experimentThresholds[experimentName]
 		if !exist {
 			Logger.Error().Msgf("No thresholds found for experiment %s", experimentName)
 			continue
 		}
-		treatmentCode, err := t.GetTreatmentCode(thresholds, experimentDef.Treatments)
+		treatmentCode, err := t.pickTreatmentCode(thresholds, experimentDef.Treatments)
 		if err != nil {
 			Logger.Error().Msgf("Failed to get treatment code for experiment %s: %v", experimentName, err)
 			continue
 		}
 		experimentArrangement[experimentName] = treatmentCode
 	}
-	return NewTrafficAllocationContext(experimentArrangement, t.experimentConfiguration)
+	return NewTrafficAllocationContext(experimentArrangement, cfg)
 }
 
 func (t *TrafficAllocator) GetTreatmentCode(thresholds []uint32, treatments []interfaces.Treatment) (string, error) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	return t.pickTreatmentCode(thresholds, treatments)
+}
 
+func (t *TrafficAllocator) pickTreatmentCode(thresholds []uint32, treatments []interfaces.Treatment) (string, error) {
 	if len(treatments) == 0 {
 		return "", fmt.Errorf("no treatments configured")
 	}
