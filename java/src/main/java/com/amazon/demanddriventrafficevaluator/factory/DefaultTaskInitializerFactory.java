@@ -69,13 +69,10 @@ public class DefaultTaskInitializerFactory {
     private final Dao<String, InputStream> fileDao;
     private final String bucket;
 
-    private ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(5);
+    private final ScheduledThreadPoolExecutor executor;
 
     public DefaultTaskInitializerFactory(String sspIdentifier, AwsCredentialsProvider credentialsProvider, String region, String bucket) {
-        this.sspIdentifier = sspIdentifier;
-        this.s3Client = AWSServiceClientFactory.getInstance().getS3Client(credentialsProvider, region);
-        this.fileDao = new S3ObjectDao(s3Client);
-        this.bucket = bucket;
+        this(sspIdentifier, credentialsProvider, region, bucket, new ScheduledThreadPoolExecutor(5));
     }
 
     public DefaultTaskInitializerFactory(String sspIdentifier, AwsCredentialsProvider credentialsProvider, String region, String bucket, ScheduledThreadPoolExecutor executor) {
