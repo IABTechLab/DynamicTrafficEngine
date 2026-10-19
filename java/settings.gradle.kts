@@ -16,4 +16,3 @@ plugins {
 }
 
 rootProject.name = "DemandDrivenTrafficEvaluator"
-include("lib")

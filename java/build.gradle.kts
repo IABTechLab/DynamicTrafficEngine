@@ -203,7 +203,7 @@ tasks.javadoc {
             use(true)
             windowTitle = project.name
             header = "${project.name} API"
-            bottom = "Copyright © 2024 Amazon.com, Inc. or its affiliates"
+            bottom = "Copyright &#169; 2024 Amazon.com, Inc. or its affiliates"
             links("https://docs.oracle.com/en/java/javase/${JavaVersion.current().majorVersion}/docs/api/")
         }
     }
