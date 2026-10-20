@@ -86,7 +86,8 @@ public class ModelResultPeriodicLoadingTask extends PeriodicTaskWithRandomizedSt
      * <p>
      * This method sets up the periodic execution schedule for the task.
      * Unlike some other tasks, this does not perform an immediate execution
-     * upon initialization.
+     * upon initialization: the first execution runs after a random delay of
+     * up to one period, and {@link #hasFinishedFirstRun()} tells when it has finished.
      * </p>
      */
     @Override
