@@ -19,7 +19,6 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ExtendWith(MockitoExtension.class)
 class ExtractorRegistryTest {
@@ -47,9 +46,9 @@ class ExtractorRegistryTest {
     void testConstructor() {
         // Test that registry is created with correct extractors
         assertNotNull(registry);
-        assertEquals(2, mockExtractors.size());
-        assertTrue(mockExtractors.containsKey("extractor1"));
-        assertTrue(mockExtractors.containsKey("extractor2"));
+        assertEquals(2, registry.getRecords().size());
+        assertEquals(mockExtractor1, registry.get("extractor1"));
+        assertEquals(mockExtractor2, registry.get("extractor2"));
     }
 
     @Test
@@ -74,8 +73,8 @@ class ExtractorRegistryTest {
 
         registry.register("jsonExtractor", JsonExtractor.class);
 
-        assertEquals(1, mockExtractors.size());
-        assertEquals(JsonExtractor.class, mockExtractors.get("jsonExtractor").getClass());
+        assertEquals(1, registry.getRecords().size());
+        assertEquals(JsonExtractor.class, registry.get("jsonExtractor").getClass());
     }
 
     @Test
@@ -97,8 +96,8 @@ class ExtractorRegistryTest {
 
         registry.register("jsonExtractor", new JsonExtractor());
 
-        assertEquals(1, mockExtractors.size());
-        assertEquals(JsonExtractor.class, mockExtractors.get("jsonExtractor").getClass());
+        assertEquals(1, registry.getRecords().size());
+        assertEquals(JsonExtractor.class, registry.get("jsonExtractor").getClass());
     }
 
     @Test
