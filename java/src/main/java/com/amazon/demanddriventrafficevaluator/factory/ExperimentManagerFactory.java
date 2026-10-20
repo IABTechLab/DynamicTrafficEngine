@@ -26,9 +26,9 @@ public class ExperimentManagerFactory {
 
     private static final ExperimentManagerFactory INSTANCE = new ExperimentManagerFactory();
 
-    private ExperimentManager experimentManager;
-    private ConfigurationProvider<ExperimentConfiguration> experimentConfigurationProvider;
-    private TreatmentAllocator treatmentAllocator;
+    private volatile ExperimentManager experimentManager;
+    private volatile ConfigurationProvider<ExperimentConfiguration> experimentConfigurationProvider;
+    private volatile TreatmentAllocator treatmentAllocator;
 
     public static ExperimentManagerFactory getInstance() {
         return INSTANCE;
@@ -39,6 +39,9 @@ public class ExperimentManagerFactory {
             return experimentManager;
         }
         synchronized (this) {
+            if (experimentManager != null) {
+                return experimentManager;
+            }
             ConfigurationProvider<ExperimentConfiguration> provider = provideExperimentConfigurationProvider();
             TreatmentAllocator allocator = provideTreatmentAllocator();
             ExperimentHandler handler = new ExperimentHandler();
@@ -52,6 +55,9 @@ public class ExperimentManagerFactory {
             return experimentConfigurationProvider;
         }
         synchronized (this) {
+            if (experimentConfigurationProvider != null) {
+                return experimentConfigurationProvider;
+            }
             LocalCacheRegistry localCacheRegistry = DefaultLocalCacheRegistryFactory.getInstance().getDefaultLocalCacheRegistrySingleton();
             Dao<String, ExperimentConfiguration> cacheDao = new LocalCacheDao<String, ExperimentConfiguration>(localCacheRegistry);
             experimentConfigurationProvider = new ExperimentConfigurationProvider(cacheDao);
@@ -64,7 +70,9 @@ public class ExperimentManagerFactory {
             return treatmentAllocator;
         }
         synchronized (this) {
-            treatmentAllocator = new TreatmentAllocatorOnRandom();
+            if (treatmentAllocator == null) {
+                treatmentAllocator = new TreatmentAllocatorOnRandom();
+            }
             return treatmentAllocator;
         }
     }
