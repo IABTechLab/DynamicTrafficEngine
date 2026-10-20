@@ -10,9 +10,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
@@ -88,6 +91,45 @@ class TaskInitializerTest {
 
         // Act & Assert
         assertThrows(RuntimeException.class, () -> taskInitializer.init());
+    }
+
+    @Test
+    void testInit_RunsOnInitializedAfterBothStages() {
+        // Arrange
+        AtomicBoolean initialized = new AtomicBoolean();
+        taskInitializer = new TaskInitializer(Collections.singletonList(mockTask1),
+                Collections.singletonList(mockTask2), 10000, () -> initialized.set(true));
+        when(mockTask1.getName()).thenReturn("Task1");
+        when(mockTask1.getMaximumAttempts()).thenReturn(1);
+        when(mockTask2.getName()).thenReturn("Task2");
+        when(mockTask2.getMaximumAttempts()).thenReturn(1);
+
+        // Act
+        taskInitializer.init();
+
+        // Assert
+        assertTrue(initialized.get());
+    }
+
+    @Test
+    void testInit_DoesNotRunOnInitializedWhenATaskFails() {
+        // Arrange
+        AtomicBoolean initialized = new AtomicBoolean();
+        taskInitializer = new TaskInitializer(Collections.singletonList(mockTask1), null, 10000,
+                () -> initialized.set(true));
+        when(mockTask1.getName()).thenReturn("Task1");
+        when(mockTask1.getMaximumAttempts()).thenReturn(1);
+        doThrow(new RuntimeException("Task failed")).when(mockTask1).run();
+
+        // Act & Assert
+        assertThrows(RuntimeException.class, () -> taskInitializer.init());
+        assertFalse(initialized.get());
+    }
+
+    @Test
+    void testConstructor_RejectsNullOnInitialized() {
+        assertThrows(NullPointerException.class,
+                () -> new TaskInitializer(Collections.singletonList(mockTask1), null, 10000, null));
     }
 
     @Test
