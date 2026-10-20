@@ -82,12 +82,7 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
             String region,
             String bucket
     ) {
-        this.sspIdentifier = supplierName;
-        this.defaultTaskInitializerFactory = new DefaultTaskInitializerFactory(supplierName, credentialsProvider, region, bucket);
-        this.bloomFilterDao = new BloomFilterDao();
-        this.bucket = bucket;
-        this.executor = new ScheduledThreadPoolExecutor(5);
-        this.fileDao = new S3ObjectDao(AWSServiceClientFactory.getInstance().getS3Client(credentialsProvider, region));
+        this(supplierName, credentialsProvider, region, bucket, new ScheduledThreadPoolExecutor(5));
     }
 
     public DefaultBidRequestEvaluatorFactory(
