@@ -18,7 +18,7 @@ import java.util.HashMap;
 public class TransformerRegistryFactory {
 
     private static final TransformerRegistryFactory INSTANCE = new TransformerRegistryFactory();
-    private TransformerRegistry transformerRegistry;
+    private volatile TransformerRegistry transformerRegistry;
 
     private TransformerRegistryFactory() {
     }
@@ -32,7 +32,9 @@ public class TransformerRegistryFactory {
             return transformerRegistry;
         }
         synchronized (this) {
-            transformerRegistry = new TransformerRegistry(new HashMap<>());
+            if (transformerRegistry == null) {
+                transformerRegistry = new TransformerRegistry(new HashMap<>());
+            }
             return transformerRegistry;
         }
     }

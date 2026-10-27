@@ -24,13 +24,16 @@ import java.util.concurrent.ConcurrentMap;
  */
 public abstract class LocalCacheRegistryFactory {
 
-    LocalCacheRegistry defaultLocalCacheRegistry;
+    volatile LocalCacheRegistry defaultLocalCacheRegistry;
 
     public LocalCacheRegistry getDefaultLocalCacheRegistrySingleton() {
         if (defaultLocalCacheRegistry != null) {
             return defaultLocalCacheRegistry;
         }
         synchronized (this) {
+            if (defaultLocalCacheRegistry != null) {
+                return defaultLocalCacheRegistry;
+            }
             boolean useDefaultLocalCacheBuilderConfig = true;
             ConcurrentMap<String, ImmutablePair<Integer, Cache>> cacheMap = new ConcurrentHashMap<>();
             Map<String, LocalCacheBuilder> localCacheBuilderMap = getLocalCacheBuilderMap();

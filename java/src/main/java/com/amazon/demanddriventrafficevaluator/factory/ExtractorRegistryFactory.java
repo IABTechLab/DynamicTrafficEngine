@@ -18,7 +18,7 @@ import java.util.HashMap;
 public class ExtractorRegistryFactory {
 
     private static final ExtractorRegistryFactory INSTANCE = new ExtractorRegistryFactory();
-    private ExtractorRegistry extractorRegistry;
+    private volatile ExtractorRegistry extractorRegistry;
 
     private ExtractorRegistryFactory() {
     }
@@ -32,7 +32,9 @@ public class ExtractorRegistryFactory {
             return extractorRegistry;
         }
         synchronized (this) {
-            extractorRegistry = new ExtractorRegistry(new HashMap<>());
+            if (extractorRegistry == null) {
+                extractorRegistry = new ExtractorRegistry(new HashMap<>());
+            }
             return extractorRegistry;
         }
     }
