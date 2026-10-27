@@ -657,15 +657,17 @@ BidRequestEvaluatorFactory bidRequestEvaluatorFactory =
         bucket,
         executor);
 
-// initialize background tasks to periodically fetch new signal data to evaluate.
+// load the configurations and schedule background tasks to periodically fetch new signal data to evaluate.
 bidRequestEvaluatorFactory.getTaskInitializer().init();
 
 // create an evaluator instance to receive recommendations. 
 BidRequestEvaluator bidRequestEvaluator = bidRequestEvaluatorFactory.getEvaluator();
 
-// sleep to ensure initialization is complete before evaluating requests.
-Thread.sleep(10000);
+// report readiness (e.g. from a health check) instead of sleeping for a fixed time.
+boolean ready = bidRequestEvaluatorFactory.isReady();
 ```
+
+`init()` loads the model and experiment configurations and schedules the periodic refresh; it throws if the configurations cannot be loaded within `task.overall.execution-timeout`. It does not wait for the model results: each model loading task runs first after a random delay of up to one refresh period (5 minutes by default), so that hosts that start together do not all read S3 at once. Until a model's results are loaded, that model returns its no-match value: 1.0 (forward) for a `LowValue` model and 0.0 (low value) for a `HighValue` model, combined with the other models by the aggregation as usual. With only `LowValue` models, evaluations therefore fail open (traffic is forwarded) until the models load. `isReady()` turns true once `init()` has completed, the feature registries are populated and every model loading task has finished its first run, which can take up to one refresh period (the longest configured model-result period) plus the model load time. A first run that fails, for example because a model file is missing or S3 returns an error, still counts as finished: that model keeps returning its no-match value until a later refresh loads it. Once true, `isReady()` stays true. Poll it from a readiness probe, or before taking traffic, if you prefer not to evaluate before the models are loaded.
 
 In addition, update the logging configurations under `src/main/resources/log4j2.xml` as needed.
 
