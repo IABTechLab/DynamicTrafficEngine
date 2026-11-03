@@ -4,6 +4,7 @@
 package com.amazon.demanddriventrafficevaluator.task;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
@@ -25,13 +26,24 @@ public class TaskInitializer {
     private final List<InitializerTask> stageOneTasks;
     private final List<InitializerTask> stageTwoTasks;
     private final long overallTimeoutMs;
+    private final Runnable onInitialized;
     private ExecutorService executorPool;
     private long taskElapsedTime = 0L;
 
     public TaskInitializer(List<InitializerTask> stageOneTasks, List<InitializerTask> stageTwoTasks, long overallTimeoutMs) {
+        this(stageOneTasks, stageTwoTasks, overallTimeoutMs, () -> { });
+    }
+
+    /**
+     * @param onInitialized Run by {@link #init()} once the tasks of both stages have completed without an exception;
+     *                      not run when there are no stage one tasks.
+     */
+    public TaskInitializer(List<InitializerTask> stageOneTasks, List<InitializerTask> stageTwoTasks, long overallTimeoutMs,
+                           Runnable onInitialized) {
         this.stageOneTasks = stageOneTasks;
         this.stageTwoTasks = stageTwoTasks;
         this.overallTimeoutMs = overallTimeoutMs;
+        this.onInitialized = Objects.requireNonNull(onInitialized, "onInitialized");
     }
 
     /**
@@ -57,6 +69,18 @@ public class TaskInitializer {
      * This method executes stage one tasks, followed by stage two tasks if present.
      * It manages the execution pool and handles overall timeout.
      * </p>
+     * <p>
+     * With the default factories, stage one loads the model and experiment configurations and
+     * schedules the feature extractor and transformer registration, which runs within about one
+     * second; stage two only schedules the periodic model-result and bloom-filter loading. The first
+     * model load runs on that schedule after a random delay of up to one refresh period (300 s by
+     * default), so this method does not wait for the model results. Until they are loaded, each
+     * model returns its no-match value: 1.0 (forward) for a {@code LowValue} model and 0.0 (low
+     * value) for a {@code HighValue} model. Callers that need to know when the first load has
+     * finished use {@code BidRequestEvaluatorFactory.isReady()}.
+     * </p>
+     *
+     * @throws RuntimeException if a task fails after its retries or the overall timeout elapses.
      */
     public void init() {
         if (stageOneTasks != null && !stageOneTasks.isEmpty()) {
@@ -65,6 +89,7 @@ public class TaskInitializer {
                 if (stageTwoTasks != null && !stageTwoTasks.isEmpty()) {
                     executeTasks(stageTwoTasks, "StageTwo", System.currentTimeMillis());
                 }
+                onInitialized.run();
             } finally {
                 executorPool.shutdown();
                 try {
@@ -116,6 +141,10 @@ public class TaskInitializer {
                         tasks.get(executedTaskCount).getName(), e.getCause()));
             }
             taskElapsedTime += elapsed;
+        }
+        if (executedTaskCount < tasks.size()) {
+            throw new RuntimeException("Timed out after " + executedTaskCount + " of " + tasks.size() + " tasks and "
+                    + (System.currentTimeMillis() - startTime) + " ms");
         }
     }
 

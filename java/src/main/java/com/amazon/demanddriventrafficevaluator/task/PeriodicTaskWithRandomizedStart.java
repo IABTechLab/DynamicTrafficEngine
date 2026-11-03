@@ -3,6 +3,7 @@
 
 package com.amazon.demanddriventrafficevaluator.task;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 
 import java.util.Random;
@@ -30,6 +31,10 @@ public abstract class PeriodicTaskWithRandomizedStart {
 
     private final Random random = new Random(System.currentTimeMillis());
 
+    // Written on the scheduler thread, read by callers of hasFinishedFirstRun().
+    @Getter(AccessLevel.NONE)
+    private volatile boolean firstRunFinished;
+
     protected PeriodicTaskWithRandomizedStart(String sspIdentifier, String taskName, long periodMs, ScheduledThreadPoolExecutor executor) {
         this.sspIdentifier = sspIdentifier;
         this.taskName = taskName;
@@ -50,6 +55,20 @@ public abstract class PeriodicTaskWithRandomizedStart {
     abstract public void initialize();
 
     /**
+     * Tells whether the first scheduled execution of this task has finished.
+     * <p>
+     * True once the first execution scheduled by {@link #schedulePeriodically(long)} has returned or thrown,
+     * whatever its outcome. An execution run directly through {@link #executeTask()}, for example by
+     * {@link #initialize()}, does not count. Once true it stays true.
+     * </p>
+     *
+     * @return true when the first scheduled execution has finished.
+     */
+    public boolean hasFinishedFirstRun() {
+        return firstRunFinished;
+    }
+
+    /**
      * Schedules the task to run periodically with a specified initial delay.
      *
      * @param initialDelay The delay in milliseconds before the first execution of the task.
@@ -61,6 +80,8 @@ public abstract class PeriodicTaskWithRandomizedStart {
             } catch (Exception e) {
                 log.error("{}: task failed", taskName, e);
                 // Optionally rethrow or handle the exception
+            } finally {
+                firstRunFinished = true;
             }
         }, initialDelay, periodMs, TimeUnit.MILLISECONDS);
     }

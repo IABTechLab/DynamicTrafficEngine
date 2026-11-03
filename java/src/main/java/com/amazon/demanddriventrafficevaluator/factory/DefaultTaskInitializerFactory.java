@@ -165,7 +165,7 @@ public class DefaultTaskInitializerFactory {
         );
     }
 
-    InitializerTask getInitializerTaskForPeriodicLoadingRuleBasedModelResult() {
+    ModelResultPeriodicLoadingInitializerTask getInitializerTaskForPeriodicLoadingRuleBasedModelResult() {
         LocalCacheDao<String, ModelConfiguration> modelConfigurationCacheDao = new LocalCacheDao<>(localCacheRegistry);
         ConfigurationProvider<ModelConfiguration> modelConfigurationProvider = new ModelConfigurationProvider(modelConfigurationCacheDao);
         Dao<String, Double> modelResultsCacheDao = new LocalCacheDao<>(localCacheRegistry);
@@ -216,7 +216,7 @@ public class DefaultTaskInitializerFactory {
         );
     }
 
-    private InitializerTask getInitializerTaskForPeriodicLoadingModelResult(
+    private ModelResultPeriodicLoadingInitializerTask getInitializerTaskForPeriodicLoadingModelResult(
             String taskName,
             long periodMs,
             int maximumAttempts,

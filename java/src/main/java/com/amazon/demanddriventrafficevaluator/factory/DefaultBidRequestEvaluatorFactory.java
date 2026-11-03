@@ -14,7 +14,9 @@ import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.RuleBasedMod
 import com.amazon.demanddriventrafficevaluator.evaluation.experiment.ExperimentManager;
 import com.amazon.demanddriventrafficevaluator.modelfeature.Extraction;
 import com.amazon.demanddriventrafficevaluator.modelfeature.Transformation;
+import com.amazon.demanddriventrafficevaluator.modelfeature.extractor.Extractor;
 import com.amazon.demanddriventrafficevaluator.modelfeature.extractor.ExtractorRegistry;
+import com.amazon.demanddriventrafficevaluator.modelfeature.transformer.Transformer;
 import com.amazon.demanddriventrafficevaluator.modelfeature.transformer.TransformerRegistry;
 import com.amazon.demanddriventrafficevaluator.repository.dao.BloomFilterDao;
 import com.amazon.demanddriventrafficevaluator.repository.dao.Dao;
@@ -33,9 +35,11 @@ import com.amazon.demanddriventrafficevaluator.repository.provider.model.ModelRe
 import com.amazon.demanddriventrafficevaluator.repository.provider.model.RuleBasedModelResultProvider;
 import com.amazon.demanddriventrafficevaluator.task.InitializerTask;
 import com.amazon.demanddriventrafficevaluator.task.InitializerTaskOnPeriodicTask;
+import com.amazon.demanddriventrafficevaluator.task.PeriodicTaskWithRandomizedStart;
 import com.amazon.demanddriventrafficevaluator.task.TaskConfiguration;
 import com.amazon.demanddriventrafficevaluator.task.TaskInitializer;
 import com.amazon.demanddriventrafficevaluator.task.dataloading.BloomFilterPeriodicLoadingTask;
+import com.amazon.demanddriventrafficevaluator.task.dataloading.ModelResultPeriodicLoadingInitializerTask;
 import com.amazon.demanddriventrafficevaluator.util.PropertiesUtil;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.configuration2.Configuration;
@@ -44,7 +48,11 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
+import java.util.ServiceConfigurationError;
+import java.util.ServiceLoader;
+import java.util.Set;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.stream.Collectors;
 
 /**
  * A factory for creating BidRequestEvaluator instances that support both rule-based
@@ -75,6 +83,12 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
     private final String bucket;
     private final ScheduledThreadPoolExecutor executor;
     private final Dao<String, InputStream> fileDao;
+    // The model loading tasks of the last TaskInitializer whose init() completed; null until one has.
+    private volatile List<PeriodicTaskWithRandomizedStart> modelLoadingTasks;
+    private volatile boolean ready;
+    // The names the registry setup tasks register; listed once, on the first isReady() call that needs them.
+    private volatile Set<String> extractorNames;
+    private volatile Set<String> transformerNames;
 
     public DefaultBidRequestEvaluatorFactory(
             String supplierName,
@@ -110,9 +124,53 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
         }
 
         List<InitializerTask> stageOneTasks = getStageOneTasks();
-        List<InitializerTask> stageTwoTasks = getStageTwoTasks();
+        ModelResultPeriodicLoadingInitializerTask ruleBasedTask =
+                defaultTaskInitializerFactory.getInitializerTaskForPeriodicLoadingRuleBasedModelResult();
+        InitializerTaskOnPeriodicTask bloomFilterTask = getInitializerTaskForPeriodicLoadingBloomFilterModelResult();
+        List<InitializerTask> stageTwoTasks = List.of(ruleBasedTask, bloomFilterTask);
+        List<PeriodicTaskWithRandomizedStart> tasks = List.of(ruleBasedTask.getTask(), bloomFilterTask.getTask());
 
-        return new TaskInitializer(stageOneTasks, stageTwoTasks, overallTimeoutMs);
+        return new TaskInitializer(stageOneTasks, stageTwoTasks, overallTimeoutMs, () -> modelLoadingTasks = tasks);
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * This factory waits for the rule-based model-result and the bloom-filter loading tasks of the
+     * {@link TaskInitializer} whose {@code init()} completed last.
+     * </p>
+     */
+    @Override
+    public boolean isReady() {
+        if (ready) {
+            return true;
+        }
+        List<PeriodicTaskWithRandomizedStart> tasks = modelLoadingTasks;
+        if (tasks == null || !tasks.stream().allMatch(PeriodicTaskWithRandomizedStart::hasFinishedFirstRun)) {
+            return false;
+        }
+        try {
+            if (extractorNames == null || transformerNames == null) {
+                extractorNames = getProviderNames(Extractor.class);
+                transformerNames = getProviderNames(Transformer.class);
+            }
+        } catch (ServiceConfigurationError e) {
+            log.error("isReady: cannot list the feature extractor and transformer providers", e);
+            return false;
+        }
+        if (ExtractorRegistryFactory.getInstance().getSingleton().getRecords().keySet().containsAll(extractorNames)
+                && TransformerRegistryFactory.getInstance().getSingleton().getRecords().keySet()
+                .containsAll(transformerNames)) {
+            ready = true;
+        }
+        return ready;
+    }
+
+    // The names the registry setup tasks register: the simple class names of the ServiceLoader providers.
+    private static Set<String> getProviderNames(Class<?> type) {
+        return ServiceLoader.load(type).stream()
+                .map(provider -> provider.type().getSimpleName())
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     @Override
@@ -167,13 +225,7 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
         return defaultTaskInitializerFactory.getStageOneTasks();
     }
 
-    private List<InitializerTask> getStageTwoTasks() {
-        InitializerTask ruleBasedTask = defaultTaskInitializerFactory.getInitializerTaskForPeriodicLoadingRuleBasedModelResult();
-        InitializerTask bloomFilterTask = getInitializerTaskForPeriodicLoadingBloomFilterModelResult();
-        return List.of(ruleBasedTask, bloomFilterTask);
-    }
-
-    private InitializerTask getInitializerTaskForPeriodicLoadingBloomFilterModelResult() {
+    private InitializerTaskOnPeriodicTask getInitializerTaskForPeriodicLoadingBloomFilterModelResult() {
         LocalCacheRegistry localCacheRegistry = DefaultLocalCacheRegistryFactory.getInstance().getDefaultLocalCacheRegistrySingleton();
         LocalCacheDao<String, ModelConfiguration> modelConfigurationCacheDao = new LocalCacheDao<>(localCacheRegistry);
         ConfigurationProvider<ModelConfiguration> modelConfigurationProvider = new ModelConfigurationProvider(modelConfigurationCacheDao);

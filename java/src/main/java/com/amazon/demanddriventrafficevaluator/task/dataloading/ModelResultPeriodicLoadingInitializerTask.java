@@ -15,6 +15,13 @@ public class ModelResultPeriodicLoadingInitializerTask extends InitializerTask {
     }
 
     /**
+     * @return the periodic task that {@link #run()} initializes.
+     */
+    public ModelResultPeriodicLoadingTask getTask() {
+        return task;
+    }
+
+    /**
      * When an object implementing interface {@code Runnable} is used
      * to create a thread, starting the thread causes the object's
      * {@code run} method to be called in that separately executing
