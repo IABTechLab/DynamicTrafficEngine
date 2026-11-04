@@ -42,8 +42,8 @@ public abstract class BidRequestEvaluatorFactory {
      *       model and experiment configurations are loaded;</li>
      *   <li>every feature extractor and transformer is registered, which happens within about one second of
      *       {@code init()} starting, longer if the executor has no free thread;</li>
-     *   <li>every model-result and bloom-filter loading task created for that {@link TaskInitializer} has finished
-     *       its first periodic run.</li>
+     *   <li>every model-result and bloom-filter loading task that the factory's {@link TaskInitializer}s schedule
+     *       has finished its first periodic run.</li>
      * </ul>
      * <p>
      * The first periodic run starts after a random delay of up to one refresh period (300 s by default; the

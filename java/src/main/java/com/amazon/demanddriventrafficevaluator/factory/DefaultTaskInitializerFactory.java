@@ -71,6 +71,12 @@ public class DefaultTaskInitializerFactory {
 
     private final ScheduledThreadPoolExecutor executor;
 
+    // Built by the first call that needs them and reused by every later one, each task wrapped in a
+    // RunUntilSucceeded, so that retrying a failed init() runs only the tasks that did not succeed and does not
+    // schedule a second periodic refresh next to one the failed attempt scheduled.
+    private List<InitializerTask> stageOneTasks;
+    private List<InitializerTask> stageTwoTasks;
+
     public DefaultTaskInitializerFactory(String sspIdentifier, AwsCredentialsProvider credentialsProvider, String region, String bucket) {
         this(sspIdentifier, credentialsProvider, region, bucket, new ScheduledThreadPoolExecutor(5));
     }
@@ -83,7 +89,17 @@ public class DefaultTaskInitializerFactory {
         this.executor = executor;
     }
 
-    public TaskInitializer getTaskInitializer() {
+    /**
+     * Returns a {@link TaskInitializer} for the configuration, rule-based model result and registry setup tasks.
+     * <p>
+     * Every initializer this factory returns shares the same tasks, and each task runs until it has succeeded
+     * once: a retry after a failed {@code init()} runs only the tasks that did not succeed, and a later
+     * {@code init()} after a successful one schedules no second set of periodic tasks.
+     * </p>
+     *
+     * @return the task initializer.
+     */
+    public synchronized TaskInitializer getTaskInitializer() {
         log.warn("getTaskInitializer Initializing task initializer");
         Configuration taskProperties = PropertiesUtil.getTaskProperties();
         long overallTimeoutMs = taskProperties.getLong("overall.execution-timeout", DEFAULT_OVERALL_EXECUTION_TIMEOUT);
@@ -97,8 +113,30 @@ public class DefaultTaskInitializerFactory {
      * Package-private: consumed by {@link DefaultBidRequestEvaluatorFactory}
      * to reuse shared initialization tasks. Do not change signature without
      * updating that class.
+     * <p>
+     * The tasks are built on the first call and the same list is returned on every later call; each task runs
+     * until it has succeeded once.
+     * </p>
      */
-    List<InitializerTask> getStageOneTasks() {
+    synchronized List<InitializerTask> getStageOneTasks() {
+        if (stageOneTasks == null) {
+            stageOneTasks = runUntilSucceeded(buildStageOneTasks());
+        }
+        return stageOneTasks;
+    }
+
+    synchronized List<InitializerTask> getStageTwoTasks() {
+        if (stageTwoTasks == null) {
+            stageTwoTasks = runUntilSucceeded(List.of(getInitializerTaskForPeriodicLoadingRuleBasedModelResult()));
+        }
+        return stageTwoTasks;
+    }
+
+    private static List<InitializerTask> runUntilSucceeded(List<InitializerTask> tasks) {
+        return tasks.stream().<InitializerTask>map(RunUntilSucceeded::new).toList();
+    }
+
+    private List<InitializerTask> buildStageOneTasks() {
         InitializerTask experimentConfigurationPeriodicLoadingTask = getInitializerTaskForPeriodicLoadingExperimentConfiguration();
         InitializerTask modelConfigurationPeriodicLoadingTask = getInitializerTaskForPeriodicLoadingModelConfiguration();
         InitializerTask ModelFeatureExtractorRegistrationInitializerTask = getInitializerTaskForRegisteringModelFeatureExtractor();
@@ -109,11 +147,6 @@ public class DefaultTaskInitializerFactory {
                 ModelFeatureExtractorRegistrationInitializerTask,
                 ModelFeatureTransformerRegistrationInitializerTask
         );
-    }
-
-    List<InitializerTask> getStageTwoTasks() {
-        InitializerTask modelResultPeriodicLoadingInitializerTask = getInitializerTaskForPeriodicLoadingRuleBasedModelResult();
-        return List.of(modelResultPeriodicLoadingInitializerTask);
     }
 
     private InitializerTaskOnPeriodicTask getInitializerTaskForPeriodicLoadingModelConfiguration() {
