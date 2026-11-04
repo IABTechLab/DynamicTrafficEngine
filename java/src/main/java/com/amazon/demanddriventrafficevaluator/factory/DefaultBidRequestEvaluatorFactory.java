@@ -83,7 +83,12 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
     private final String bucket;
     private final ScheduledThreadPoolExecutor executor;
     private final Dao<String, InputStream> fileDao;
-    // The model loading tasks of the last TaskInitializer whose init() completed; null until one has.
+    // The stage two tasks, built by the first getTaskInitializer() call and reused by every later one, so that
+    // retrying a failed init() does not schedule a second model loader next to one the failed attempt scheduled.
+    // The stage one tasks are shared the same way by defaultTaskInitializerFactory.getStageOneTasks().
+    private List<InitializerTask> stageTwoTasks;
+    private List<PeriodicTaskWithRandomizedStart> stageTwoPeriodicTasks;
+    // The model loading tasks once an init() has completed; null until one has.
     private volatile List<PeriodicTaskWithRandomizedStart> modelLoadingTasks;
     private volatile boolean ready;
     // The names the registry setup tasks register; listed once, on the first isReady() call that needs them.
@@ -115,7 +120,7 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
     }
 
     @Override
-    public TaskInitializer getTaskInitializer() {
+    public synchronized TaskInitializer getTaskInitializer() {
         log.info("getTaskInitializer Initializing task initializer with bloom filter support");
         Configuration taskProperties = PropertiesUtil.getTaskProperties();
         long overallTimeoutMs = taskProperties.getLong("overall.execution-timeout", 600000L);
@@ -124,11 +129,14 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
         }
 
         List<InitializerTask> stageOneTasks = getStageOneTasks();
-        ModelResultPeriodicLoadingInitializerTask ruleBasedTask =
-                defaultTaskInitializerFactory.getInitializerTaskForPeriodicLoadingRuleBasedModelResult();
-        InitializerTaskOnPeriodicTask bloomFilterTask = getInitializerTaskForPeriodicLoadingBloomFilterModelResult();
-        List<InitializerTask> stageTwoTasks = List.of(ruleBasedTask, bloomFilterTask);
-        List<PeriodicTaskWithRandomizedStart> tasks = List.of(ruleBasedTask.getTask(), bloomFilterTask.getTask());
+        if (stageTwoTasks == null) {
+            ModelResultPeriodicLoadingInitializerTask ruleBasedTask =
+                    defaultTaskInitializerFactory.getInitializerTaskForPeriodicLoadingRuleBasedModelResult();
+            InitializerTaskOnPeriodicTask bloomFilterTask = getInitializerTaskForPeriodicLoadingBloomFilterModelResult();
+            stageTwoTasks = List.of(new RunUntilSucceeded(ruleBasedTask), new RunUntilSucceeded(bloomFilterTask));
+            stageTwoPeriodicTasks = List.of(ruleBasedTask.getTask(), bloomFilterTask.getTask());
+        }
+        List<PeriodicTaskWithRandomizedStart> tasks = stageTwoPeriodicTasks;
 
         return new TaskInitializer(stageOneTasks, stageTwoTasks, overallTimeoutMs, () -> modelLoadingTasks = tasks);
     }
@@ -136,8 +144,10 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
     /**
      * {@inheritDoc}
      * <p>
-     * This factory waits for the rule-based model-result and the bloom-filter loading tasks of the
-     * {@link TaskInitializer} whose {@code init()} completed last.
+     * This factory waits for its rule-based model-result and bloom-filter loading tasks. Every
+     * {@link TaskInitializer} it returns shares them and schedules each one only once, so after a
+     * failed {@code init()} a successful retry makes this method turn true without a second set of
+     * loaders.
      * </p>
      */
     @Override

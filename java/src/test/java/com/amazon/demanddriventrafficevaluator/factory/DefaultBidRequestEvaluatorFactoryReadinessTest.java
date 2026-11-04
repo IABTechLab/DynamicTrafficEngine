@@ -3,8 +3,8 @@
 
 package com.amazon.demanddriventrafficevaluator.factory;
 
-import com.amazon.demanddriventrafficevaluator.modelfeature.extractor.Extractor;
-import com.amazon.demanddriventrafficevaluator.modelfeature.transformer.Transformer;
+import com.amazon.demanddriventrafficevaluator.modelfeature.extractor.ExtractorRegistry;
+import com.amazon.demanddriventrafficevaluator.modelfeature.transformer.TransformerRegistry;
 import com.amazon.demanddriventrafficevaluator.repository.dao.BloomFilterDao;
 import com.amazon.demanddriventrafficevaluator.repository.dao.LocalCacheDao;
 import com.amazon.demanddriventrafficevaluator.repository.localcache.LocalCacheRegistry;
@@ -35,8 +35,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -72,16 +72,18 @@ class DefaultBidRequestEvaluatorFactoryReadinessTest {
     // stage one schedules the experiment and model configuration refreshes, stage two the two model loads
     private static final int CONFIGURATION_TASK_COUNT = 2;
     private static final int PERIODIC_TASK_COUNT = 4;
+    // DefaultTaskInitializerFactory's stage two schedules the rule-based model load only
+    private static final int RULE_BASED_ONLY_PERIODIC_TASK_COUNT = 3;
 
     private final LocalCacheRegistry localCacheRegistry =
             DefaultLocalCacheRegistryFactory.getInstance().getDefaultLocalCacheRegistrySingleton();
     private final LocalCacheDao<String, Double> modelResultsCacheDao = new LocalCacheDao<>(localCacheRegistry);
     private final ControllableExecutor executor = new ControllableExecutor();
     private final String eTag = UUID.randomUUID().toString();
-    private final Map<String, Extractor> extractors = ExtractorRegistryFactory.getInstance().getSingleton().getRecords();
-    private final Map<String, Transformer> transformers = TransformerRegistryFactory.getInstance().getSingleton().getRecords();
-    private final Map<String, Extractor> extractorsBefore = new HashMap<>(extractors);
-    private final Map<String, Transformer> transformersBefore = new HashMap<>(transformers);
+    private final ExtractorRegistry extractorRegistryBefore = ExtractorRegistryFactory.getInstance().getSingleton();
+    private final TransformerRegistry transformerRegistryBefore = TransformerRegistryFactory.getInstance().getSingleton();
+    // while true, the model configuration file is missing
+    private volatile boolean modelConfigurationMissing;
 
     @Mock
     private AwsCredentialsProvider credentialsProvider;
@@ -96,9 +98,9 @@ class DefaultBidRequestEvaluatorFactoryReadinessTest {
         s3ClientBefore = getS3Client();
         setS3Client(s3Client);
         // the registries are JVM-wide singletons; start empty so readiness depends on this test's init() only
-        // (safe while test classes run sequentially, as configured today)
-        extractors.clear();
-        transformers.clear();
+        // (safe while test classes run sequentially, as configured today). getRecords() is an unmodifiable
+        // snapshot, so swap in empty registries rather than clearing the shared ones.
+        emptyRegistries();
         modelResultsCacheDao.clear(RULE_BASED_MODEL_IDENTIFIER);
         when(s3Client.headObject(ArgumentMatchers.<HeadObjectRequest>any()))
                 .thenReturn(HeadObjectResponse.builder().contentLength(1024L).build());
@@ -106,16 +108,14 @@ class DefaultBidRequestEvaluatorFactoryReadinessTest {
 
     @AfterEach
     void tearDown() throws Exception {
+        // restore the shared registries first so a later failure here cannot leave the empty ones installed
+        setRegistries(extractorRegistryBefore, transformerRegistryBefore);
         setS3Client(s3ClientBefore);
         executor.shutdownNow();
         // the configurations loaded by init() live in JVM-wide caches; leave them as a fresh JVM would
         modelResultsCacheDao.clear(CACHE_KEY_MODEL_CONFIGURATION);
         modelResultsCacheDao.clear(CACHE_KEY_EXPERIMENT_CONFIGURATION);
         modelResultsCacheDao.clear(RULE_BASED_MODEL_IDENTIFIER);
-        extractors.clear();
-        extractors.putAll(extractorsBefore);
-        transformers.clear();
-        transformers.putAll(transformersBefore);
     }
 
     @Test
@@ -207,7 +207,7 @@ class DefaultBidRequestEvaluatorFactoryReadinessTest {
     }
 
     @Test
-    void testIsReady_staysTrueAfterLaterRuns() {
+    void testIsReady_staysTrueAfterLaterRuns() throws Exception {
         // Arrange
         stubS3("/test/ModelConfigurationWithBloomFilter.json", null, null);
         DefaultBidRequestEvaluatorFactory factory = newFactory();
@@ -219,7 +219,7 @@ class DefaultBidRequestEvaluatorFactoryReadinessTest {
         doThrow(S3Exception.builder().message("throttled").statusCode(503).build())
                 .when(s3Client).getObject(ArgumentMatchers.<GetObjectRequest>any());
         executor.runPeriodicTasks(0, PERIODIC_TASK_COUNT);
-        extractors.clear();
+        emptyRegistries();
 
         // Assert
         assertTrue(factory.isReady(), "once true it stays true");
@@ -255,6 +255,78 @@ class DefaultBidRequestEvaluatorFactoryReadinessTest {
         assertFalse(factory.isReady());
     }
 
+    @Test
+    void testIsReady_retryAfterAFailedInitSchedulesEachModelTaskOnce() {
+        // Arrange: the first attempt schedules both configuration refreshes and one model task, then the executor
+        // rejects the other model task on every attempt, so init() throws after a model task was scheduled
+        stubS3("/test/ModelConfigurationWithBloomFilter.json", null, null);
+        DefaultBidRequestEvaluatorFactory factory = newFactory();
+        executor.rejectPeriodicTasksFrom = CONFIGURATION_TASK_COUNT + 1;
+        assertThrows(RuntimeException.class, () -> factory.getTaskInitializer().init());
+        assertEquals(CONFIGURATION_TASK_COUNT + 1, executor.periodicTasks.size());
+        assertFalse(factory.isReady(), "not ready after a failed init()");
+
+        // Act: the caller retries and the executor accepts the task now
+        executor.rejectPeriodicTasksFrom = Integer.MAX_VALUE;
+        factory.getTaskInitializer().init();
+
+        // Assert: the retry schedules only the model task that the failed attempt did not schedule
+        assertEquals(PERIODIC_TASK_COUNT, executor.periodicTasks.size(),
+                "two configuration refreshes, one rule-based and one bloom-filter task in total");
+        assertFalse(factory.isReady());
+        executor.runPeriodicTasks(0, executor.periodicTasks.size());
+        assertTrue(factory.isReady(), "ready after the successful retry");
+    }
+
+    @Test
+    void testRetryAfterAFailedStageOneSchedulesEachConfigurationRefreshOnce() {
+        // Arrange: the model configuration is missing on the first attempt, so stage one fails after the
+        // experiment configuration has loaded and scheduled its refresh
+        stubS3("/test/ModelConfigurationWithBloomFilter.json", null, null);
+        modelConfigurationMissing = true;
+        DefaultBidRequestEvaluatorFactory factory = newFactory();
+        assertThrows(RuntimeException.class, () -> factory.getTaskInitializer().init());
+        assertEquals(1, executor.periodicTasks.size(), "only the experiment configuration refresh is scheduled");
+
+        // Act: the file appears and the caller retries, then calls init() once more
+        modelConfigurationMissing = false;
+        factory.getTaskInitializer().init();
+        int scheduledByTheRetry = executor.periodicTasks.size();
+        factory.getTaskInitializer().init();
+
+        // Assert: each configuration refresh and each model load is scheduled exactly once
+        assertEquals(PERIODIC_TASK_COUNT, scheduledByTheRetry,
+                "the retry schedules the model configuration refresh and the model loads, not a second "
+                        + "experiment configuration refresh");
+        assertEquals(PERIODIC_TASK_COUNT, executor.periodicTasks.size(), "a later init() schedules nothing");
+        executor.runPeriodicTasks(0, executor.periodicTasks.size());
+        assertTrue(factory.isReady());
+    }
+
+    @Test
+    void testTaskInitializerFactoryRetryAfterAFailedStageOneSchedulesEachConfigurationRefreshOnce() {
+        // Arrange: as above, through the rule-based-only factory
+        stubS3("/test/ModelConfiguration.json", null, null);
+        modelConfigurationMissing = true;
+        DefaultTaskInitializerFactory factory = new DefaultTaskInitializerFactory(SSP_IDENTIFIER, credentialsProvider,
+                "us-east-1", "test-bucket", executor);
+        assertThrows(RuntimeException.class, () -> factory.getTaskInitializer().init());
+        assertEquals(1, executor.periodicTasks.size(), "only the experiment configuration refresh is scheduled");
+
+        // Act
+        modelConfigurationMissing = false;
+        factory.getTaskInitializer().init();
+        int scheduledByTheRetry = executor.periodicTasks.size();
+        factory.getTaskInitializer().init();
+
+        // Assert
+        assertEquals(RULE_BASED_ONLY_PERIODIC_TASK_COUNT, scheduledByTheRetry,
+                "the retry schedules the model configuration refresh and the model load, not a second "
+                        + "experiment configuration refresh");
+        assertEquals(RULE_BASED_ONLY_PERIODIC_TASK_COUNT, executor.periodicTasks.size(),
+                "a later init() schedules nothing");
+    }
+
     // --- helpers ---
 
     private DefaultBidRequestEvaluatorFactory newFactory() {
@@ -266,7 +338,7 @@ class DefaultBidRequestEvaluatorFactoryReadinessTest {
                         byte[] bloomFilterBytes) {
         when(s3Client.getObject(ArgumentMatchers.<GetObjectRequest>any())).thenAnswer(invocation -> {
             String key = ((GetObjectRequest) invocation.getArgument(0)).key();
-            if ((SSP_IDENTIFIER + "/configuration/model/config.json").equals(key)) {
+            if ((SSP_IDENTIFIER + "/configuration/model/config.json").equals(key) && !modelConfigurationMissing) {
                 return response(resource(modelConfiguration));
             } else if ((SSP_IDENTIFIER + "/configuration/experiment/config.json").equals(key)) {
                 return response(resource("/test/ExperimentConfigurationWithAggregation.json"));
@@ -307,6 +379,20 @@ class DefaultBidRequestEvaluatorFactoryReadinessTest {
         field.set(AWSServiceClientFactory.getInstance(), client);
     }
 
+    private static void emptyRegistries() throws Exception {
+        setRegistries(new ExtractorRegistry(new HashMap<>()), new TransformerRegistry(new HashMap<>()));
+    }
+
+    private static void setRegistries(ExtractorRegistry extractorRegistry, TransformerRegistry transformerRegistry)
+            throws Exception {
+        Field extractorField = ExtractorRegistryFactory.class.getDeclaredField("extractorRegistry");
+        extractorField.setAccessible(true);
+        extractorField.set(ExtractorRegistryFactory.getInstance(), extractorRegistry);
+        Field transformerField = TransformerRegistryFactory.class.getDeclaredField("transformerRegistry");
+        transformerField.setAccessible(true);
+        transformerField.set(TransformerRegistryFactory.getInstance(), transformerRegistry);
+    }
+
     private static BloomFilterDao getBloomFilterDao(DefaultBidRequestEvaluatorFactory factory) throws Exception {
         Field field = DefaultBidRequestEvaluatorFactory.class.getDeclaredField("bloomFilterDao");
         field.setAccessible(true);
@@ -331,6 +417,8 @@ class DefaultBidRequestEvaluatorFactoryReadinessTest {
         private final List<Runnable> deferredOneShotTasks = new ArrayList<>();
         private final List<ScheduledRun> periodicTasks = new ArrayList<>();
         private boolean deferOneShotTasks;
+        // scheduleAtFixedRate() rejects every task once this many periodic tasks have been captured
+        private volatile int rejectPeriodicTasksFrom = Integer.MAX_VALUE;
 
         ControllableExecutor() {
             super(1);
@@ -349,6 +437,9 @@ class DefaultBidRequestEvaluatorFactoryReadinessTest {
         @Override
         public synchronized ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period,
                                                                    TimeUnit unit) {
+            if (periodicTasks.size() >= rejectPeriodicTasksFrom) {
+                throw new RejectedExecutionException("rejected by the test");
+            }
             periodicTasks.add(new ScheduledRun(command, unit.toMillis(initialDelay)));
             return null;
         }
