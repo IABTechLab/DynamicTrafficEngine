@@ -39,6 +39,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 
 import java.io.InputStream;
 import java.util.List;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import static com.amazon.demanddriventrafficevaluator.repository.dao.LocalCacheDao.CACHE_KEY_EXPERIMENT_CONFIGURATION;
@@ -69,7 +70,7 @@ public class DefaultTaskInitializerFactory {
     private final Dao<String, InputStream> fileDao;
     private final String bucket;
 
-    private final ScheduledThreadPoolExecutor executor;
+    private final ScheduledExecutorService executor;
 
     // Built by the first call that needs them and reused by every later one, each task wrapped in a
     // RunUntilSucceeded, so that retrying a failed init() runs only the tasks that did not succeed and does not
@@ -78,10 +79,14 @@ public class DefaultTaskInitializerFactory {
     private List<InitializerTask> stageTwoTasks;
 
     public DefaultTaskInitializerFactory(String sspIdentifier, AwsCredentialsProvider credentialsProvider, String region, String bucket) {
-        this(sspIdentifier, credentialsProvider, region, bucket, new ScheduledThreadPoolExecutor(5));
+        this(sspIdentifier, credentialsProvider, region, bucket, DaemonThreads.newScheduledThreadPool());
     }
 
     public DefaultTaskInitializerFactory(String sspIdentifier, AwsCredentialsProvider credentialsProvider, String region, String bucket, ScheduledThreadPoolExecutor executor) {
+        this(sspIdentifier, credentialsProvider, region, bucket, (ScheduledExecutorService) executor);
+    }
+
+    public DefaultTaskInitializerFactory(String sspIdentifier, AwsCredentialsProvider credentialsProvider, String region, String bucket, ScheduledExecutorService executor) {
         this.sspIdentifier = sspIdentifier;
         this.s3Client = AWSServiceClientFactory.getInstance().getS3Client(credentialsProvider, region);
         this.fileDao = new S3ObjectDao(s3Client);
@@ -226,7 +231,7 @@ public class DefaultTaskInitializerFactory {
             int maximumAttempts,
             long minDelayBeforeAttemptMs,
             long maxDelayBeforeAttemptMs,
-            ScheduledThreadPoolExecutor executor,
+            ScheduledExecutorService executor,
             DefaultLoader<ConfigurationLoaderInput> configurationLoader,
             String configType
     ) {
@@ -255,7 +260,7 @@ public class DefaultTaskInitializerFactory {
             int maximumAttempts,
             long minDelayBeforeAttemptMs,
             long maxDelayBeforeAttemptMs,
-            ScheduledThreadPoolExecutor executor,
+            ScheduledExecutorService executor,
             ConfigurationProvider<ModelConfiguration> modelConfigurationProvider,
             DefaultLoader<ModelResultLoaderInput> modelResultLoader
     ) {
@@ -305,7 +310,7 @@ public class DefaultTaskInitializerFactory {
 
     private <T extends ModelFeatureOperator> InitializerTaskOnOneShotTask getInitializerTaskForRegisteringModelFeatureOperator(
             String taskName,
-            ScheduledThreadPoolExecutor executor,
+            ScheduledExecutorService executor,
             Registry<T> registry,
             Class<T> type,
             int maximumAttempts,

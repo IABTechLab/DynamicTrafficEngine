@@ -132,6 +132,43 @@ class TaskInitializerTest {
     }
 
     @Test
+    void testInit_BeforeEachStageThrowingStopsBeforeAnyTaskOfTheStage() {
+        // Arrange: the check passes for stage one, then fails
+        AtomicInteger checks = new AtomicInteger();
+        AtomicBoolean initialized = new AtomicBoolean();
+        taskInitializer = new TaskInitializer(Collections.singletonList(mockTask1), Collections.singletonList(mockTask2),
+                10000, () -> initialized.set(true), () -> {
+                    if (checks.incrementAndGet() > 1) {
+                        throw new IllegalStateException("closed");
+                    }
+                });
+        when(mockTask1.getName()).thenReturn("Task1");
+        when(mockTask1.getMaximumAttempts()).thenReturn(1);
+
+        // Act & Assert: stage one runs, stage two does not start, and onInitialized is not run
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> taskInitializer.init());
+        assertEquals("closed", e.getMessage());
+        verify(mockTask1, times(1)).run();
+        verify(mockTask2, times(0)).run();
+        assertFalse(initialized.get());
+    }
+
+    @Test
+    void testInit_BeforeEachStageRunsBeforeEveryStageAndBeforeOnInitialized() {
+        AtomicInteger checks = new AtomicInteger();
+        taskInitializer = new TaskInitializer(Collections.singletonList(mockTask1), Collections.singletonList(mockTask2),
+                10000, () -> assertEquals(3, checks.get()), checks::incrementAndGet);
+        when(mockTask1.getName()).thenReturn("Task1");
+        when(mockTask1.getMaximumAttempts()).thenReturn(1);
+        when(mockTask2.getName()).thenReturn("Task2");
+        when(mockTask2.getMaximumAttempts()).thenReturn(1);
+
+        taskInitializer.init();
+
+        assertEquals(3, checks.get());
+    }
+
+    @Test
     void testConstructor_RejectsNullOnInitialized() {
         assertThrows(NullPointerException.class,
                 () -> new TaskInitializer(Collections.singletonList(mockTask1), null, 10000, null));

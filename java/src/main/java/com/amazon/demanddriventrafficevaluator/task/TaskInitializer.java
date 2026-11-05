@@ -31,6 +31,7 @@ public class TaskInitializer {
     private final List<InitializerTask> stageTwoTasks;
     private final long overallTimeoutMs;
     private final Runnable onInitialized;
+    private final Runnable beforeEachStage;
 
     public TaskInitializer(List<InitializerTask> stageOneTasks, List<InitializerTask> stageTwoTasks, long overallTimeoutMs) {
         this(stageOneTasks, stageTwoTasks, overallTimeoutMs, () -> { });
@@ -42,10 +43,23 @@ public class TaskInitializer {
      */
     public TaskInitializer(List<InitializerTask> stageOneTasks, List<InitializerTask> stageTwoTasks, long overallTimeoutMs,
                            Runnable onInitialized) {
+        this(stageOneTasks, stageTwoTasks, overallTimeoutMs, onInitialized, () -> { });
+    }
+
+    /**
+     * @param onInitialized   Run by {@link #init()} once the tasks of both stages have completed without an exception;
+     *                        not run when there are no stage one tasks.
+     * @param beforeEachStage Run by {@link #init()} before each stage starts, and before {@code onInitialized}; an
+     *                        exception it throws ends {@code init()} with that exception, before any task of the stage
+     *                        runs. For example, a factory that has been closed throws {@link IllegalStateException}.
+     */
+    public TaskInitializer(List<InitializerTask> stageOneTasks, List<InitializerTask> stageTwoTasks, long overallTimeoutMs,
+                           Runnable onInitialized, Runnable beforeEachStage) {
         this.stageOneTasks = stageOneTasks;
         this.stageTwoTasks = stageTwoTasks;
         this.overallTimeoutMs = overallTimeoutMs;
         this.onInitialized = Objects.requireNonNull(onInitialized, "onInitialized");
+        this.beforeEachStage = Objects.requireNonNull(beforeEachStage, "beforeEachStage");
     }
 
     /**
@@ -90,14 +104,17 @@ public class TaskInitializer {
     public void init() {
         if (stageOneTasks != null && !stageOneTasks.isEmpty()) {
             long startTime = System.currentTimeMillis();
+            beforeEachStage.run();
             executeTasks(stageOneTasks, "StageOne", startTime);
             if (stageTwoTasks != null && !stageTwoTasks.isEmpty()) {
                 long elapsed = System.currentTimeMillis() - startTime;
                 if (elapsed >= overallTimeoutMs) {
                     throw new RuntimeException("Timed out after stage one and " + elapsed + " ms, before stage two");
                 }
+                beforeEachStage.run();
                 executeTasks(stageTwoTasks, "StageTwo", startTime);
             }
+            beforeEachStage.run();
             onInitialized.run();
         } else {
             log.warn("No initialization tasks defined.");

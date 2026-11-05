@@ -8,6 +8,7 @@ import com.amazon.demanddriventrafficevaluator.modelfeature.transformer.Transfor
 import com.amazon.demanddriventrafficevaluator.repository.dao.BloomFilterDao;
 import com.amazon.demanddriventrafficevaluator.repository.dao.LocalCacheDao;
 import com.amazon.demanddriventrafficevaluator.repository.localcache.LocalCacheRegistry;
+import com.amazon.demanddriventrafficevaluator.task.TaskInitializer;
 import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
 import org.junit.jupiter.api.AfterEach;
@@ -36,7 +37,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -50,6 +53,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mockingDetails;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
 /**
@@ -325,6 +330,131 @@ class DefaultBidRequestEvaluatorFactoryReadinessTest {
                         + "experiment configuration refresh");
         assertEquals(RULE_BASED_ONLY_PERIODIC_TASK_COUNT, executor.periodicTasks.size(),
                 "a later init() schedules nothing");
+    }
+
+    @Test
+    void testRetryOnACallerScheduledExecutorServiceSchedulesEachTaskOnceOnIt() {
+        // Arrange: a ScheduledExecutorService that is not a ScheduledThreadPoolExecutor, in front of the test
+        // executor; the model configuration is missing on the first attempt, so stage one fails
+        ScheduledExecutorService scheduler = Executors.unconfigurableScheduledExecutorService(executor);
+        stubS3("/test/ModelConfigurationWithBloomFilter.json", null, null);
+        modelConfigurationMissing = true;
+        DefaultBidRequestEvaluatorFactory factory = new DefaultBidRequestEvaluatorFactory(SSP_IDENTIFIER,
+                credentialsProvider, "us-east-1", "test-bucket", scheduler);
+        assertThrows(RuntimeException.class, () -> factory.getTaskInitializer().init());
+        assertEquals(1, executor.periodicTasks.size(), "only the experiment configuration refresh is scheduled");
+
+        // Act: the file appears and the caller retries, then calls init() once more
+        modelConfigurationMissing = false;
+        factory.getTaskInitializer().init();
+        factory.getTaskInitializer().init();
+
+        // Assert: every task the factory built once ran on the caller's scheduler, each scheduled exactly once
+        assertEquals(PERIODIC_TASK_COUNT, executor.periodicTasks.size());
+        executor.runPeriodicTasks(0, executor.periodicTasks.size());
+        assertTrue(factory.isReady());
+        factory.close();
+        assertFalse(executor.isShutdown(), "close() leaves a caller's scheduler running");
+    }
+
+    @Test
+    void testTaskInitializerFactoryRetryOnACallerScheduledExecutorServiceSchedulesEachTaskOnceOnIt() {
+        // Arrange: as above, through the rule-based-only factory
+        ScheduledExecutorService scheduler = Executors.unconfigurableScheduledExecutorService(executor);
+        stubS3("/test/ModelConfiguration.json", null, null);
+        modelConfigurationMissing = true;
+        DefaultTaskInitializerFactory factory = new DefaultTaskInitializerFactory(SSP_IDENTIFIER, credentialsProvider,
+                "us-east-1", "test-bucket", scheduler);
+        assertThrows(RuntimeException.class, () -> factory.getTaskInitializer().init());
+        assertEquals(1, executor.periodicTasks.size());
+
+        // Act
+        modelConfigurationMissing = false;
+        factory.getTaskInitializer().init();
+        factory.getTaskInitializer().init();
+
+        // Assert
+        assertEquals(RULE_BASED_ONLY_PERIODIC_TASK_COUNT, executor.periodicTasks.size());
+    }
+
+    @Test
+    void testCloseCancelsEveryPeriodicTaskOnACallerExecutor() {
+        // Arrange: the caller's executor, which close() leaves running
+        stubS3("/test/ModelConfigurationWithBloomFilter.json", null, null);
+        DefaultBidRequestEvaluatorFactory factory = newFactory();
+        factory.getTaskInitializer().init();
+        assertEquals(PERIODIC_TASK_COUNT, executor.periodicTasks.size());
+        int s3CallsBeforeClose = mockingDetails(s3Client).getInvocations().size();
+
+        // Act
+        factory.close();
+        executor.runPeriodicTasks(0, executor.periodicTasks.size());
+
+        // Assert: no refresh or model load of the closed factory runs on the caller's executor, and the skipped
+        // first model runs do not make the factory ready
+        assertEquals(s3CallsBeforeClose, mockingDetails(s3Client).getInvocations().size(), "no S3 call after close");
+        assertFalse(factory.isReady(), "a skipped run after close() is not a first model load");
+        assertFalse(executor.isShutdown());
+    }
+
+    @Test
+    void testIsReady_falseAfterClose() {
+        // Arrange: a factory that became ready
+        stubS3("/test/ModelConfigurationWithBloomFilter.json", null, null);
+        DefaultBidRequestEvaluatorFactory factory = newFactory();
+        factory.getTaskInitializer().init();
+        executor.runPeriodicTasks(0, executor.periodicTasks.size());
+        assertTrue(factory.isReady());
+
+        // Act
+        factory.close();
+
+        // Assert: a closed factory is never ready, also when a run in progress at close() finishes later
+        assertFalse(factory.isReady());
+    }
+
+    @Test
+    void testInitOnAClosedFactoryFailsBeforeRunningAnyTask() {
+        // Arrange: an initializer obtained before close(), nothing run yet; S3 is not stubbed, it must not be called
+        reset(s3Client);
+        DefaultBidRequestEvaluatorFactory factory = newFactory();
+        TaskInitializer initializer = factory.getTaskInitializer();
+        factory.close();
+
+        // Act & Assert: it throws at once, with no configuration load and nothing scheduled
+        assertThrows(IllegalStateException.class, initializer::init);
+        assertEquals(0, mockingDetails(s3Client).getInvocations().stream()
+                .filter(invocation -> invocation.getMethod().getName().equals("getObject")).count());
+        assertEquals(0, executor.periodicTasks.size());
+    }
+
+    @Test
+    void testCloseAfterInitStopsTheOwnedExecutorAndALaterInitFails() throws Exception {
+        // Arrange: the factory creates and owns its executor
+        stubS3("/test/ModelConfigurationWithBloomFilter.json", null, null);
+        DefaultBidRequestEvaluatorFactory factory = new DefaultBidRequestEvaluatorFactory(SSP_IDENTIFIER,
+                credentialsProvider, "us-east-1", "test-bucket");
+        Field field = DefaultBidRequestEvaluatorFactory.class.getDeclaredField("executor");
+        field.setAccessible(true);
+        ScheduledThreadPoolExecutor owned = (ScheduledThreadPoolExecutor) field.get(factory);
+        try {
+            TaskInitializer initializer = factory.getTaskInitializer();
+            initializer.init();
+            assertFalse(factory.isReady(), "the first model loads are still a random delay away");
+
+            // Act
+            factory.close();
+
+            // Assert: the periodic refreshes and model loads the once-built tasks scheduled are cancelled, the
+            // pool's threads end, and init() on the closed factory throws: every once-built task has succeeded,
+            // so without the check it would return normally while nothing is scheduled any more
+            assertTrue(owned.awaitTermination(5, TimeUnit.SECONDS));
+            assertThrows(IllegalStateException.class, factory::getTaskInitializer);
+            assertThrows(IllegalStateException.class, initializer::init);
+            assertFalse(factory.isReady());
+        } finally {
+            owned.shutdownNow();
+        }
     }
 
     // --- helpers ---

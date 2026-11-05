@@ -7,6 +7,8 @@ import lombok.AccessLevel;
 import lombok.Getter;
 
 import java.util.Random;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.log4j.Log4j2;
@@ -27,7 +29,7 @@ public abstract class PeriodicTaskWithRandomizedStart {
     private final String sspIdentifier;
     private final String taskName;
     private final long periodMs;
-    private final ScheduledThreadPoolExecutor executor;
+    private final ScheduledExecutorService executor;
 
     private final Random random = new Random(System.currentTimeMillis());
 
@@ -35,11 +37,40 @@ public abstract class PeriodicTaskWithRandomizedStart {
     @Getter(AccessLevel.NONE)
     private volatile boolean firstRunFinished;
 
+    // The periodic schedule, once set; null before, or when the executor returned none.
+    @Getter(AccessLevel.NONE)
+    private volatile ScheduledFuture<?> scheduled;
+    @Getter(AccessLevel.NONE)
+    private volatile boolean cancelled;
+
     protected PeriodicTaskWithRandomizedStart(String sspIdentifier, String taskName, long periodMs, ScheduledThreadPoolExecutor executor) {
+        this(sspIdentifier, taskName, periodMs, (ScheduledExecutorService) executor);
+    }
+
+    protected PeriodicTaskWithRandomizedStart(String sspIdentifier, String taskName, long periodMs, ScheduledExecutorService executor) {
         this.sspIdentifier = sspIdentifier;
         this.taskName = taskName;
         this.periodMs = periodMs;
         this.executor = executor;
+    }
+
+    /**
+     * Returns the executor passed to the constructor if it is a {@link ScheduledThreadPoolExecutor},
+     * otherwise null.
+     *
+     * @deprecated returns null for any other {@link ScheduledExecutorService}; use
+     *             {@link #getScheduledExecutorService()}, which always returns the executor.
+     */
+    @Deprecated
+    public ScheduledThreadPoolExecutor getExecutor() {
+        return executor instanceof ScheduledThreadPoolExecutor ? (ScheduledThreadPoolExecutor) executor : null;
+    }
+
+    /**
+     * @return the executor passed to the constructor, never null unless null was passed.
+     */
+    public ScheduledExecutorService getScheduledExecutorService() {
+        return executor;
     }
 
     /**
@@ -74,16 +105,39 @@ public abstract class PeriodicTaskWithRandomizedStart {
      * @param initialDelay The delay in milliseconds before the first execution of the task.
      */
     protected void schedulePeriodically(long initialDelay) {
-        executor.scheduleAtFixedRate(() -> {
+        scheduled = executor.scheduleAtFixedRate(() -> {
+            if (cancelled) {
+                // A run skipped after cancel() did not load anything, so it does not count as a first run.
+                return;
+            }
             try {
                 executeTask();
             } catch (Exception e) {
-                log.error("{}: task failed", taskName, e);
-                // Optionally rethrow or handle the exception
+                if (cancelled || executor.isShutdown()) {
+                    // Expected when the factory is closed during a run, for example an interrupted load.
+                    log.debug("{}: task failed after it was stopped", taskName, e);
+                } else {
+                    log.error("{}: task failed", taskName, e);
+                }
             } finally {
                 firstRunFinished = true;
             }
         }, initialDelay, periodMs, TimeUnit.MILLISECONDS);
+        if (cancelled) {
+            cancel();
+        }
+    }
+
+    /**
+     * Stops the periodic schedule: no further run starts, and a run in progress is not interrupted. Safe to call
+     * before the task is scheduled, in which case a later schedule is cancelled at once, and more than once.
+     */
+    public void cancel() {
+        cancelled = true;
+        ScheduledFuture<?> future = scheduled;
+        if (future != null) {
+            future.cancel(false);
+        }
     }
 
     /**
