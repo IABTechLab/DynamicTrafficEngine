@@ -4,7 +4,10 @@
 [versions]
 commons-math3 = "3.6.1"
 guava = "33.2.1-jre"
+vertx = "4.5.34"
 
 [libraries]
 commons-math3 = { module = "org.apache.commons:commons-math3", version.ref = "commons-math3" }
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
+vertx-core = { module = "io.vertx:vertx-core", version.ref = "vertx" }
+vertx-junit5 = { module = "io.vertx:vertx-junit5", version.ref = "vertx" }
