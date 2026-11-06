@@ -77,7 +77,8 @@ public class BidRequestEvaluatorOnRuleBasedModel implements BidRequestEvaluator 
      * </p>
      *
      * @param input The BidRequestEvaluatorInput containing the bid request to evaluate.
-     * @return A BidRequestEvaluatorOutput containing the evaluation response.
+     * @return A BidRequestEvaluatorOutput containing the evaluation response and, when
+     *         {@link BidRequestEvaluatorInput#isIncludeDetails()} is true, the model evaluations.
      */
     @Override
     public BidRequestEvaluatorOutput evaluate(BidRequestEvaluatorInput input) {
@@ -110,9 +111,12 @@ public class BidRequestEvaluatorOnRuleBasedModel implements BidRequestEvaluator 
                     evaluationContext);
             log.debug("aggregatedModelEvaluationResult: {}", aggregatedModelEvaluationResult);
             evaluationContext.setAggregatedModelEvaluationResult(aggregatedModelEvaluationResult);
-            return BidRequestEvaluatorOutput.builder()
-                    .response(buildResponse(evaluationContext))
-                    .build();
+            BidRequestEvaluatorOutput.BidRequestEvaluatorOutputBuilder outputBuilder = BidRequestEvaluatorOutput.builder()
+                    .response(buildResponse(evaluationContext));
+            if (input.isIncludeDetails()) {
+                outputBuilder.modelEvaluations(buildModelEvaluations(evaluationContext));
+            }
+            return outputBuilder.build();
         } catch (Exception e) {
             evaluationContext.addError("Error while evaluating bid request.\n" + e.getMessage());
             log.error("Error while evaluating bid request", e);
@@ -182,6 +186,26 @@ public class BidRequestEvaluatorOnRuleBasedModel implements BidRequestEvaluator 
             modelDefinitions.add(modelDefinitionByIdentifier.get(modelIdentifier));
         }
         return modelDefinitions;
+    }
+
+    // A summary failure never changes the response: the failing output is logged and skipped.
+    private List<ModelEvaluation> buildModelEvaluations(EvaluationContext context) {
+        List<ModelEvaluatorOutput> outputs = context.getModelEvaluatorOutputs();
+        if (outputs == null || outputs.isEmpty()) {
+            return List.of();
+        }
+        List<ModelEvaluation> modelEvaluations = new ArrayList<>(outputs.size());
+        for (ModelEvaluatorOutput output : outputs) {
+            if (output == null) {
+                continue;
+            }
+            try {
+                modelEvaluations.add(ModelEvaluation.from(output));
+            } catch (RuntimeException e) {
+                log.error("Error while summarizing a model evaluation", e);
+            }
+        }
+        return modelEvaluations;
     }
 
     private Response buildResponse(EvaluationContext context) {
