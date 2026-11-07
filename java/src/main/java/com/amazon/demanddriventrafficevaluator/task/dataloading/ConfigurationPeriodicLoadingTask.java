@@ -9,6 +9,7 @@ import com.amazon.demanddriventrafficevaluator.task.PeriodicTaskWithRandomizedSt
 import com.amazon.demanddriventrafficevaluator.util.PropertiesUtil;
 import org.apache.commons.configuration2.Configuration;
 
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 /**
@@ -30,6 +31,18 @@ public class ConfigurationPeriodicLoadingTask extends PeriodicTaskWithRandomized
             String taskName,
             long periodMs,
             ScheduledThreadPoolExecutor executor,
+            DefaultLoader<ConfigurationLoaderInput> configurationLoader,
+            String configurationType,
+            String s3Bucket
+    ) {
+        this(sspIdentifier, taskName, periodMs, (ScheduledExecutorService) executor, configurationLoader, configurationType, s3Bucket);
+    }
+
+    public ConfigurationPeriodicLoadingTask(
+            String sspIdentifier,
+            String taskName,
+            long periodMs,
+            ScheduledExecutorService executor,
             DefaultLoader<ConfigurationLoaderInput> configurationLoader,
             String configurationType,
             String s3Bucket

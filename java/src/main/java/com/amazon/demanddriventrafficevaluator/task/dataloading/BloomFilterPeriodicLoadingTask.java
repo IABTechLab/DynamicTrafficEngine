@@ -14,6 +14,7 @@ import com.amazon.demanddriventrafficevaluator.util.PropertiesUtil;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.configuration2.Configuration;
 
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 /**
@@ -38,6 +39,18 @@ public class BloomFilterPeriodicLoadingTask extends PeriodicTaskWithRandomizedSt
             String taskName,
             long periodMs,
             ScheduledThreadPoolExecutor executor,
+            ConfigurationProvider<ModelConfiguration> modelConfigurationProvider,
+            DefaultLoader<ModelResultLoaderInput> bloomFilterModelLoader,
+            String s3Bucket
+    ) {
+        this(sspIdentifier, taskName, periodMs, (ScheduledExecutorService) executor, modelConfigurationProvider, bloomFilterModelLoader, s3Bucket);
+    }
+
+    public BloomFilterPeriodicLoadingTask(
+            String sspIdentifier,
+            String taskName,
+            long periodMs,
+            ScheduledExecutorService executor,
             ConfigurationProvider<ModelConfiguration> modelConfigurationProvider,
             DefaultLoader<ModelResultLoaderInput> bloomFilterModelLoader,
             String s3Bucket

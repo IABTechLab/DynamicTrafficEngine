@@ -41,6 +41,13 @@ final class RunUntilSucceeded extends InitializerTask {
         this.task = task;
     }
 
+    /**
+     * @return the wrapped task.
+     */
+    InitializerTask getTask() {
+        return task;
+    }
+
     @Override
     public void run() {
         if (!lock.tryLock()) {

@@ -7,6 +7,7 @@ import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.BidRequestEv
 import com.amazon.demanddriventrafficevaluator.task.TaskInitializer;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 /**
@@ -18,13 +19,23 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
  * and BidRequestEvaluator.
  * </p>
  */
-public abstract class BidRequestEvaluatorFactory {
+public abstract class BidRequestEvaluatorFactory implements AutoCloseable {
 
     public static BidRequestEvaluatorFactory create(String supplierName, AwsCredentialsProvider credentialsProvider, String region, String bucket) {
         return new DefaultBidRequestEvaluatorFactory(supplierName, credentialsProvider, region, bucket);
     }
 
     public static BidRequestEvaluatorFactory create(String supplierName, AwsCredentialsProvider credentialsProvider, String region, String bucket, ScheduledThreadPoolExecutor executor) {
+        return new DefaultBidRequestEvaluatorFactory(supplierName, credentialsProvider, region, bucket, executor);
+    }
+
+    /**
+     * Creates a factory whose tasks are all scheduled on the given executor, which may be any
+     * {@link ScheduledExecutorService}. The tasks do blocking S3 loads on the executor's threads,
+     * so it must not be a non-blocking event loop. The executor is owned by the caller and
+     * {@link #close()} never shuts it down.
+     */
+    public static BidRequestEvaluatorFactory create(String supplierName, AwsCredentialsProvider credentialsProvider, String region, String bucket, ScheduledExecutorService executor) {
         return new DefaultBidRequestEvaluatorFactory(supplierName, credentialsProvider, region, bucket, executor);
     }
 
@@ -48,8 +59,8 @@ public abstract class BidRequestEvaluatorFactory {
      * <p>
      * The first periodic run starts after a random delay of up to one refresh period (300 s by default; the
      * longest of the configured model-result periods), so this can take up to one refresh period plus the model
-     * load time after {@code init()} returns, longer if the executor has no free thread. Once true it stays true;
-     * later refresh failures do not reset it. It stays false if {@code init()} throws, and while a feature
+     * load time after {@code init()} returns, longer if the executor has no free thread. Once true it stays true
+     * until the factory is closed; later refresh failures do not reset it. It stays false if {@code init()} throws, and while a feature
      * extractor or transformer provider has not been registered, for example because it failed to load.
      * </p>
      * <p>
@@ -71,6 +82,15 @@ public abstract class BidRequestEvaluatorFactory {
      */
     public boolean isReady() {
         throw new UnsupportedOperationException("isReady is not implemented by " + getClass().getName());
+    }
+
+    /**
+     * Releases resources this factory created itself. The default implementation does nothing;
+     * subclasses that create their own resources override it. Executors supplied by the caller
+     * are never shut down. Safe to call more than once.
+     */
+    @Override
+    public void close() {
     }
 
 }

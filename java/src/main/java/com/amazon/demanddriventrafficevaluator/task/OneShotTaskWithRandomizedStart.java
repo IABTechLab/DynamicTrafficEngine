@@ -4,6 +4,7 @@
 package com.amazon.demanddriventrafficevaluator.task;
 
 import java.util.Random;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.log4j.Log4j2;
@@ -20,13 +21,32 @@ import lombok.extern.log4j.Log4j2;
 public abstract class OneShotTaskWithRandomizedStart {
     private static final int DELAY_PERIOD = 1000;
     final String taskName;
+    /**
+     * The executor passed to the constructor if it is a {@link ScheduledThreadPoolExecutor}, otherwise null.
+     *
+     * @deprecated null for any other {@link ScheduledExecutorService}; use {@link #getScheduledExecutorService()}.
+     */
+    @Deprecated
     final ScheduledThreadPoolExecutor executor;
+    private final ScheduledExecutorService scheduler;
 
     private final Random random = new Random(System.currentTimeMillis());
 
     protected OneShotTaskWithRandomizedStart(String taskName, ScheduledThreadPoolExecutor executor) {
+        this(taskName, (ScheduledExecutorService) executor);
+    }
+
+    protected OneShotTaskWithRandomizedStart(String taskName, ScheduledExecutorService executor) {
         this.taskName = taskName;
-        this.executor = executor;
+        this.executor = executor instanceof ScheduledThreadPoolExecutor ? (ScheduledThreadPoolExecutor) executor : null;
+        this.scheduler = executor;
+    }
+
+    /**
+     * @return the executor passed to the constructor, never null unless null was passed.
+     */
+    public ScheduledExecutorService getScheduledExecutorService() {
+        return scheduler;
     }
 
     /**
@@ -54,11 +74,16 @@ public abstract class OneShotTaskWithRandomizedStart {
 
         log.debug("{}: is scheduled and starts with delay: {}", taskName, initialDelay);
 
-        executor.schedule(() -> {
+        scheduler.schedule(() -> {
             try {
                 executeTask();
             } catch (Exception e) {
-                log.error("{}: task failed", taskName, e);
+                if (scheduler.isShutdown()) {
+                    // Expected when the factory is closed during the run.
+                    log.debug("{}: task failed after its executor was shut down", taskName, e);
+                } else {
+                    log.error("{}: task failed", taskName, e);
+                }
                 // Optionally rethrow or handle the exception
             }
         }, initialDelay, TimeUnit.MILLISECONDS);
