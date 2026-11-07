@@ -13,4 +13,11 @@ import lombok.Getter;
 public class BidRequestEvaluatorInput {
     private final String openRtbRequest;
     private final Map<String, List<String>> openRtbRequestMap;
+
+    /**
+     * When true, the output also carries its optional details, today
+     * {@link BidRequestEvaluatorOutput#getModelEvaluations()}. Default false.
+     */
+    @Builder.Default
+    private final boolean includeDetails = false;
 }

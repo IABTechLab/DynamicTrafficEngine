@@ -724,12 +724,14 @@ requestOutput := requestEvaluator.Evaluate(&evaluation.BidRequestEvaluatorInput{
 |--------------------|------|-------------|
 | openRtbRequest | string | Raw OpenRTB request, in JSON format. One of openRtbRequest and openRtbRequestMap must be present. If both are present, openRtbRequest is used. Example: `"{\"cur\":[\"USD\"],\"site\":{\"domain\":\"www.domain.com\",\"publisher\":{\"id\":\"pub123\"},\"id\":\"site123\",\"page\":\"https://www.domain.com/fullurl\"},\"id\":\"request123\",\"imp\":[{\"banner\":{\"pos\":1,\"w\":970,\"h\":250,\"format\":[{\"w\":970,\"h\":250}]},\"bidfloor\":1.23,\"bidfloorcur\":\"USD\",\"id\":\"1\"}],\"user\":{\"id\":\"user123\"},\"device\":{\"geo\":{\"zip\":\"00000\",\"country\":\"USA\",\"city\":\"testcity\"},\"ua\":\"ua_string123\",\"make\":\"desktop\",\"devicetype\":2}}"` |
 | openRtbRequestMap | object | Abridged OpenRTB request, as a Map of string -> List<string>. The keys are the path of the field, in [dot notation described in JsonPath](https://github.com/json-path/JsonPath?tab=readme-ov-file#getting-started), and the values are a list of string value(s) of the field. One of openRtbRequest and openRtbRequestMap must be present. If both are present, openRtbRequest is used. Example construction: `Map<String, List<String>> openRtbRequestMap = new HashMap<>(); openRtbRequestMap.put("$.app", List.of("testapp")); openRtbRequestMap.put("$.imp[0].video", List.of("testvideo")); openRtbRequestMap.put("$.app.publisher.id", List.of("pub123")); openRtbRequestMap.put("$.device.geo.country", List.of("USA")); openRtbRequestMap.put("$.imp[0].video.w", List.of("123")); openRtbRequestMap.put("$.imp[0].video.h", List.of("456")); openRtbRequestMap.put("$.imp[0].video.pos", List.of("1")); openRtbRequestMap.put("$.device.devicetype", List.of("4")); openRtbRequestMap.put("$.imp[0].pmp.deals[*].id", List.of("deal123", "deal456"));` |
+| includeDetails | boolean, optional | Java only. Default false. When true, the output also carries `modelEvaluations`. When false, nothing extra is built. |
 
 #### 2.2.5.2. Response Body
 
 | Response Body Field | Type | Description |
 |--------------------|------|-------------|
 | response | Object, required | Filter recommendation for the Buyer |
+| modelEvaluations | array of objects | Java only. Never null; empty unless the request set `includeDetails` to true, and empty when the default response is returned. Not sent to the Buyer. |
 | **Response Object** |  |  |
 | slots (imps) | array of objects, required | Evaluation of signals for each slot (imp object) of the incoming bid request |
 | ext | string, required | Seller is expected to add this JSON blob to the `ext` field in the root level object of the OpenRTB request that they forward to the Buyer. This field contains information on whether the evaluator internally assigned the request to treatment (*learning*=0) or control (*learning*=1). Example value: `"amazontest": {"learning": 1}` |
@@ -743,6 +745,38 @@ requestOutput := requestEvaluator.Evaluate(&evaluation.BidRequestEvaluatorInput{
 | version | int | Version of the signal that was evaluated for this slot |
 | status | string | Status of signal execution, one of SUCCESS, ERROR, TIMEOUT |
 | debugInfo | string | Debug logs for the signal |
+| **ModelEvaluation Object (Java, opt-in)** |  |  |
+| identifier, name, version | string | Model identifier, name and version from the model configuration; null only if the evaluator returned no model definition |
+| type | string | Model value type, HighValue or LowValue |
+| status | string | One of SUCCESS, ERROR, TIMEOUT |
+| value | number or null | The model's score; null when the evaluator returned no model result (built-in evaluators: on ERROR) |
+| values, keys | arrays | Values and keys the model looked up; empty when there is no result |
+
+Example `modelEvaluations` (Java, `includeDetails(true)`) for a request evaluated by a rule-based model that matched (score 0.0) and a Bloom-filter model that did not (score 1.0), serialized with Jackson:
+
+```json
+[ {
+  "identifier" : "adsp_low-value_v2",
+  "name" : "low-value",
+  "version" : "v2",
+  "type" : "LowValue",
+  "status" : "SUCCESS",
+  "value" : 0.0,
+  "values" : [ 0.0 ],
+  "keys" : [ "site|banner|539014228|USA|970x250|a|2" ]
+}, {
+  "identifier" : "adsp_inv_v1",
+  "name" : "inv",
+  "version" : "v1",
+  "type" : "LowValue",
+  "status" : "SUCCESS",
+  "value" : 1.0,
+  "values" : [ 1.0 ],
+  "keys" : [ "539014228|USA" ]
+} ]
+```
+
+A model with status ERROR has `"value" : null` and empty `values` and `keys`.
 
 ## 2.3. DTE Filtering
 

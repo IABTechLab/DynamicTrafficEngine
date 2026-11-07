@@ -11,6 +11,8 @@ import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.BidRequestEv
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.BloomFilterModelEvaluator;
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.ConfigurableAggregator;
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.DelegatingModelEvaluator;
+import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.ModelEvaluation;
+import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.ModelEvaluationStatus;
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.ModelEvaluationResultsAggregator;
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.ModelEvaluator;
 import com.amazon.demanddriventrafficevaluator.evaluation.evaluator.Response;
@@ -33,6 +35,7 @@ import com.amazon.demanddriventrafficevaluator.repository.dao.S3ObjectDao;
 import com.amazon.demanddriventrafficevaluator.repository.entity.ExperimentConfiguration;
 import com.amazon.demanddriventrafficevaluator.repository.entity.ModelConfiguration;
 import com.amazon.demanddriventrafficevaluator.repository.entity.ModelFormat;
+import com.amazon.demanddriventrafficevaluator.repository.entity.ModelValueType;
 import com.amazon.demanddriventrafficevaluator.repository.loader.DefaultLoader;
 import com.amazon.demanddriventrafficevaluator.repository.loader.configuration.ConfigurationLoaderInput;
 import com.amazon.demanddriventrafficevaluator.repository.loader.configuration.DefaultConfigurationLoader;
@@ -69,6 +72,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -76,10 +81,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.amazon.demanddriventrafficevaluator.repository.dao.LocalCacheDao.CACHE_KEY_EXPERIMENT_CONFIGURATION;
 import static com.amazon.demanddriventrafficevaluator.repository.dao.LocalCacheDao.CACHE_KEY_MODEL_CONFIGURATION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
 /**
@@ -374,6 +383,98 @@ public class BidRequestEvaluatorWithBloomFilterTest extends BaseTestCase {
                 .build();
 
         assertEquals(expectedResponse, output.getResponse());
+    }
+
+    // ========================================================================
+    // Opt-in model evaluation summaries
+    // ========================================================================
+
+    /**
+     * With includeDetails(true), both the rule-based and the bloom filter model are summarized,
+     * the bloom filter hit reads as SUCCESS with value 0.0, and the response is unchanged.
+     */
+    @Test
+    public void testModelEvaluationsOptIn_summarizesRuleBasedAndBloomFilter() {
+        @SuppressWarnings("UnstableApiUsage")
+        BloomFilter<String> bloomFilter = BloomFilter.create(
+                Funnels.stringFunnel(StandardCharsets.UTF_8), 100, 0.01);
+        bloomFilter.put("539014228|USA");
+
+        setupMocksWithBloomFilter("etag-bf-summary", bloomFilter);
+        executeTasks();
+        executeBloomFilterLoadingTask();
+        bidRequestEvaluator = getBidRequestEvaluatorWithBloomFilter();
+        String openRtbRequest = readJsonResourceAsString("/test/RawOpenRTBRequest.json");
+
+        BidRequestEvaluatorOutput output = bidRequestEvaluator.evaluate(BidRequestEvaluatorInput.builder()
+                .openRtbRequest(openRtbRequest)
+                .includeDetails(true)
+                .build());
+
+        List<ModelEvaluation> evaluations = output.getModelEvaluations();
+        assertEquals(2, evaluations.size());
+        Map<String, ModelEvaluation> byIdentifier = evaluations.stream()
+                .collect(Collectors.toMap(ModelEvaluation::getIdentifier, Function.identity()));
+
+        ModelEvaluation bloom = byIdentifier.get(BLOOM_FILTER_MODEL_IDENTIFIER);
+        assertEquals(ModelEvaluationStatus.SUCCESS, bloom.getStatus());
+        assertEquals("inv", bloom.getName());
+        assertEquals("v1", bloom.getVersion());
+        assertEquals(ModelValueType.LowValue, bloom.getType());
+        assertEquals(Double.valueOf(0.0), bloom.getValue());
+        assertEquals(List.of("539014228|USA"), bloom.getKeys());
+
+        ModelEvaluation ruleBased = byIdentifier.get("adsp_low-value_v2");
+        assertEquals(ModelEvaluationStatus.SUCCESS, ruleBased.getStatus());
+        assertEquals(Double.valueOf(0.0), ruleBased.getValue());
+        assertEquals(List.of("site|banner|539014228|USA|970x250|a|2"), ruleBased.getKeys());
+        assertEquals(List.of(0.0), ruleBased.getValues());
+
+        // The response is identical to the one without includeDetails.
+        Response expectedResponse = Response.builder()
+                .slots(List.of(Slot.builder()
+                        .filterDecision(1.0)
+                        .decision(0.0)
+                        .build()))
+                .learning(1)
+                .build();
+        assertEquals(expectedResponse, output.getResponse());
+
+        BidRequestEvaluatorOutput withoutDetails = bidRequestEvaluator.evaluate(BidRequestEvaluatorInput.builder()
+                .openRtbRequest(openRtbRequest)
+                .build());
+        assertEquals(output.getResponse(), withoutDetails.getResponse());
+        assertSame(List.of(), withoutDetails.getModelEvaluations());
+    }
+
+    /**
+     * Regenerates the README example: a rule-based hit and a bloom filter miss, serialized with Jackson,
+     * must equal the JSON block in README.md.
+     */
+    @Test
+    public void testModelEvaluationsReadmeExample_matchesActualRun() throws Exception {
+        @SuppressWarnings("UnstableApiUsage")
+        BloomFilter<String> bloomFilter = BloomFilter.create(
+                Funnels.stringFunnel(StandardCharsets.UTF_8), 100, 0.01);
+        bloomFilter.put("999999|GBR"); // does not contain the request tuple
+
+        setupMocksWithBloomFilter("etag-bf-readme", bloomFilter);
+        executeTasks();
+        executeBloomFilterLoadingTask();
+        bidRequestEvaluator = getBidRequestEvaluatorWithBloomFilter();
+
+        BidRequestEvaluatorOutput output = bidRequestEvaluator.evaluate(BidRequestEvaluatorInput.builder()
+                .openRtbRequest(readJsonResourceAsString("/test/RawOpenRTBRequest.json"))
+                .includeDetails(true)
+                .build());
+        String actual = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(output.getModelEvaluations());
+
+        String readme = Files.readString(Path.of("..", "README.md"), StandardCharsets.UTF_8);
+        int marker = readme.indexOf("Example `modelEvaluations`");
+        int start = readme.indexOf("```json\n", marker) + "```json\n".length();
+        int end = readme.indexOf("\n```", start);
+        assertTrue(marker >= 0 && end > start, "README example block not found");
+        assertEquals(readme.substring(start, end), actual.replace(System.lineSeparator(), "\n"));
     }
 
     // ========================================================================
