@@ -8,6 +8,7 @@ import com.amazon.demanddriventrafficevaluator.modelfeature.Registry;
 import com.amazon.demanddriventrafficevaluator.task.OneShotTaskWithRandomizedStart;
 
 import java.util.ServiceLoader;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 /**
@@ -28,6 +29,15 @@ public class ModelFeatureOperatorRegistrySetupTask<T extends ModelFeatureOperato
     public ModelFeatureOperatorRegistrySetupTask(
             String taskName,
             ScheduledThreadPoolExecutor executor,
+            Registry<T> registry,
+            Class<T> type
+    ) {
+        this(taskName, (ScheduledExecutorService) executor, registry, type);
+    }
+
+    public ModelFeatureOperatorRegistrySetupTask(
+            String taskName,
+            ScheduledExecutorService executor,
             Registry<T> registry,
             Class<T> type
     ) {

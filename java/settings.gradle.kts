@@ -16,3 +16,4 @@ plugins {
 }
 
 rootProject.name = "DemandDrivenTrafficEvaluator"
+include("vertx")

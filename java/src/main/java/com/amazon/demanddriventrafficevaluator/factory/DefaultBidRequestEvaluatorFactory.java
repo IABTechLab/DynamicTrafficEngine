@@ -46,11 +46,13 @@ import org.apache.commons.configuration2.Configuration;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.stream.Collectors;
 
@@ -81,13 +83,17 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
     final DefaultTaskInitializerFactory defaultTaskInitializerFactory;
     private final BloomFilterDao bloomFilterDao;
     private final String bucket;
-    private final ScheduledThreadPoolExecutor executor;
+    private final ScheduledExecutorService executor;
     private final Dao<String, InputStream> fileDao;
+    private final boolean ownsExecutor;
+    private volatile boolean closed;
     // The stage two tasks, built by the first getTaskInitializer() call and reused by every later one, so that
     // retrying a failed init() does not schedule a second model loader next to one the failed attempt scheduled.
     // The stage one tasks are shared the same way by defaultTaskInitializerFactory.getStageOneTasks().
     private List<InitializerTask> stageTwoTasks;
     private List<PeriodicTaskWithRandomizedStart> stageTwoPeriodicTasks;
+    // Every periodic task of both stages, which close() cancels.
+    private List<PeriodicTaskWithRandomizedStart> periodicTasks;
     // The model loading tasks once an init() has completed; null until one has.
     private volatile List<PeriodicTaskWithRandomizedStart> modelLoadingTasks;
     private volatile boolean ready;
@@ -101,7 +107,7 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
             String region,
             String bucket
     ) {
-        this(supplierName, credentialsProvider, region, bucket, new ScheduledThreadPoolExecutor(5));
+        this(supplierName, credentialsProvider, region, bucket, DaemonThreads.newScheduledThreadPool(), true);
     }
 
     public DefaultBidRequestEvaluatorFactory(
@@ -111,12 +117,40 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
             String bucket,
             ScheduledThreadPoolExecutor executor
     ) {
+        this(supplierName, credentialsProvider, region, bucket, executor, false);
+    }
+
+    /**
+     * Creates a factory whose tasks are all scheduled on the given executor, which may be any
+     * {@link ScheduledExecutorService}. The tasks do blocking S3 loads on the executor's threads,
+     * so it must not be a non-blocking event loop. The executor is owned by the caller and
+     * {@link #close()} never shuts it down.
+     */
+    public DefaultBidRequestEvaluatorFactory(
+            String supplierName,
+            AwsCredentialsProvider credentialsProvider,
+            String region,
+            String bucket,
+            ScheduledExecutorService executor
+    ) {
+        this(supplierName, credentialsProvider, region, bucket, executor, false);
+    }
+
+    private DefaultBidRequestEvaluatorFactory(
+            String supplierName,
+            AwsCredentialsProvider credentialsProvider,
+            String region,
+            String bucket,
+            ScheduledExecutorService executor,
+            boolean ownsExecutor
+    ) {
         this.sspIdentifier = supplierName;
         this.defaultTaskInitializerFactory = new DefaultTaskInitializerFactory(supplierName, credentialsProvider, region, bucket, executor);
         this.bloomFilterDao = new BloomFilterDao();
         this.bucket = bucket;
         this.executor = executor;
         this.fileDao = new S3ObjectDao(AWSServiceClientFactory.getInstance().getS3Client(credentialsProvider, region));
+        this.ownsExecutor = ownsExecutor;
     }
 
     @Override
@@ -128,6 +162,7 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
             throw new IllegalStateException("Invalid overall execution timeout which should be larger than 0.");
         }
 
+        requireOpen();
         List<InitializerTask> stageOneTasks = getStageOneTasks();
         if (stageTwoTasks == null) {
             ModelResultPeriodicLoadingInitializerTask ruleBasedTask =
@@ -137,8 +172,22 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
             stageTwoPeriodicTasks = List.of(ruleBasedTask.getTask(), bloomFilterTask.getTask());
         }
         List<PeriodicTaskWithRandomizedStart> tasks = stageTwoPeriodicTasks;
+        if (periodicTasks == null) {
+            List<PeriodicTaskWithRandomizedStart> all = new ArrayList<>();
+            for (InitializerTask task : stageOneTasks) {
+                InitializerTask unwrapped = task instanceof RunUntilSucceeded wrapper ? wrapper.getTask() : task;
+                if (unwrapped instanceof InitializerTaskOnPeriodicTask periodic) {
+                    all.add(periodic.getTask());
+                }
+            }
+            all.addAll(stageTwoPeriodicTasks);
+            periodicTasks = List.copyOf(all);
+        }
 
-        return new TaskInitializer(stageOneTasks, stageTwoTasks, overallTimeoutMs, () -> modelLoadingTasks = tasks);
+        // close() cancels every task in periodicTasks, built above, and a cancelled task that an init() in progress
+        // schedules afterwards cancels itself, so a closed factory leaves nothing scheduled.
+        return new TaskInitializer(stageOneTasks, stageTwoTasks, overallTimeoutMs, () -> modelLoadingTasks = tasks,
+                this::requireOpen);
     }
 
     /**
@@ -149,9 +198,16 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
      * failed {@code init()} a successful retry makes this method turn true without a second set of
      * loaders.
      * </p>
+     * <p>
+     * False once {@link #close()} has been called.
+     * </p>
      */
     @Override
     public boolean isReady() {
+        if (closed) {
+            // a closed factory loads nothing more, whatever a run in progress at close() completed
+            return false;
+        }
         if (ready) {
             return true;
         }
@@ -196,6 +252,36 @@ public class DefaultBidRequestEvaluatorFactory extends BidRequestEvaluatorFactor
                 modelEvaluator,
                 modelEvaluationResultsAggregator
         );
+    }
+
+    /**
+     * Cancels the periodic refreshes and model loads this factory scheduled, on whichever executor,
+     * and shuts down the scheduled executor this factory created itself, letting a running load and
+     * already queued one-shot tasks finish. An executor passed to the constructor is left running. Safe to call more than once. A closed factory cannot
+     * be initialized again: {@link #getTaskInitializer()} and {@code init()} on an initializer
+     * obtained earlier throw {@link IllegalStateException}; create a new factory instead.
+     */
+    @Override
+    public void close() {
+        closed = true;
+        cancelPeriodicTasks();
+        if (ownsExecutor) {
+            executor.shutdown();
+        }
+    }
+
+    private synchronized void cancelPeriodicTasks() {
+        if (periodicTasks != null) {
+            periodicTasks.forEach(PeriodicTaskWithRandomizedStart::cancel);
+        }
+    }
+
+    // The tasks are built once and a retry runs only those that have not succeeded, so without this check an
+    // init() after close() would return normally while nothing is scheduled any more.
+    private void requireOpen() {
+        if (closed) {
+            throw new IllegalStateException("This factory is closed; create a new one");
+        }
     }
 
     ModelConfigurationProvider provideModelConfigurationProvider() {

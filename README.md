@@ -671,7 +671,9 @@ boolean ready = bidRequestEvaluatorFactory.isReady();
 
 `init()` does not wait for model results. Each model loads first after a random delay of up to one refresh period (5 minutes by default), so hosts that start together do not all read S3 at once. Until a model loads, it returns its no-match value: forward (1.0) for a `LowValue` model, low value (0.0) for a `HighValue` model.
 
-`isReady()` turns true once `init()` has completed and every model has had its first load attempt, successful or not. This can take up to one refresh period plus the load time. Once true, it stays true. Poll it from a readiness probe if you do not want to evaluate before models load.
+`isReady()` turns true once `init()` has completed and every model has had its first load attempt, successful or not. This can take up to one refresh period plus the load time. Once true, it stays true until `close()`, after which it is false. Poll it from a readiness probe if you do not want to evaluate before models load.
+
+`BidRequestEvaluatorFactory` implements `AutoCloseable`. `close()` stops the periodic refreshes and model loads, and shuts down the scheduled executor the factory created when none was provided; an executor you provided is not shut down. A closed default factory cannot be initialized again: `getTaskInitializer()` and `init()` throw `IllegalStateException`. The executor the factory creates uses daemon threads named `dte-scheduler-N`, so it never keeps the JVM from exiting, whether or not you call `close()`. Earlier versions used non-daemon threads: an application that relied on DTE's threads alone to keep its JVM running must now keep a non-daemon thread of its own.
 
 In addition, update the logging configurations under `src/main/resources/log4j2.xml` as needed.
 
