@@ -6,7 +6,6 @@ package bloomfilter
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 
 	bloom "github.com/OldPanda/bloomfilter"
@@ -86,19 +85,22 @@ func (l *BloomFilterLoader) loadSingleModel(sspIdentifier string, folderPrefix s
 	}
 
 	s3BucketName := strings.TrimPrefix(folderPrefix, repository.S3Prefix)
-	getObjectOutput, err := l.daoFactory.GetS3Object(context.TODO(), s3BucketName, s3Path)
+	// Use a per-model cache key for ETag change detection
+	cacheKey := CacheKeyBloomFilterFileIdentifier + "_" + modelIdentifier
+	getObjectOutput, notModified, err := l.daoFactory.GetS3ObjectIfChanged(context.TODO(), s3BucketName, s3Path, repository.CachedFileIdentifier(l.localCacheFactory, cacheKey))
 	if err != nil {
 		loaderLogger.Warn().Msgf("Bloom filter file not found or S3 error for %s/%s: %v", s3BucketName, s3Path, err)
 		return fmt.Errorf("error fetching bloom filter S3 file %s/%s: %w", s3BucketName, s3Path, err)
 	}
+	if notModified {
+		loaderLogger.Info().Msgf("Skipping bloom filter refresh for %s (ETag unchanged)", modelIdentifier)
+		return nil
+	}
 
 	defer func() {
-		_, _ = io.Copy(io.Discard, getObjectOutput.Body)
 		_ = getObjectOutput.Body.Close()
 	}()
 
-	// Use a per-model cache key for ETag change detection
-	cacheKey := CacheKeyBloomFilterFileIdentifier + "_" + modelIdentifier
 	if !l.localCacheFactory.ShouldRefresh(cacheKey, *(getObjectOutput.ETag)) {
 		loaderLogger.Info().Msgf("Skipping bloom filter refresh for %s (ETag unchanged)", modelIdentifier)
 		return nil

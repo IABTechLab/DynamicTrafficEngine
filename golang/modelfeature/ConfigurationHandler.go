@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,12 +54,15 @@ func (t *ConfigurationHandler[T]) Load() (bool, error) {
 		s3BucketName := strings.TrimPrefix(t.folderPrefix, repository.S3Prefix)
 		Logger.Info().Msgf("bucketname: %s", s3BucketName)
 
-		getObjectOutput, s3Error := t.daoFactory.GetS3Object(context.TODO(), s3BucketName, filename)
+		getObjectOutput, notModified, s3Error := t.daoFactory.GetS3ObjectIfChanged(context.TODO(), s3BucketName, filename, repository.CachedFileIdentifier(t.localCacheFactory, t.fileIdentifierCacheKey))
 		if s3Error != nil {
 			return false, fmt.Errorf("error fetching s3 file: %v", s3Error)
 		}
+		if notModified {
+			Logger.Info().Msgf("Skipping refresh for %s", filename)
+			return false, nil
+		}
 		defer func() {
-			_, _ = io.Copy(io.Discard, getObjectOutput.Body)
 			_ = getObjectOutput.Body.Close()
 		}()
 		if !t.localCacheFactory.ShouldRefresh(t.fileIdentifierCacheKey, *getObjectOutput.ETag) {

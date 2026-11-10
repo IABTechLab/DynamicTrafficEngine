@@ -113,12 +113,13 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_SkipsWhenETagUnchan
 	}
 
 	etag := "etag-unchanged-123"
+	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
 	suite.daoFactory.EXPECT().
-		GetS3Object(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/test_model.bloom").
+		GetS3ObjectIfChanged(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/test_model.bloom", mock.Anything).
 		Return(&s3.GetObjectOutput{
 			ETag: &etag,
 			Body: io.NopCloser(strings.NewReader("")),
-		}, nil).Once()
+		}, false, nil).Once()
 
 	// ShouldRefresh returns false — ETag unchanged
 	suite.localCacheFactory.EXPECT().
@@ -146,12 +147,13 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_StoresFilterOnSucce
 	bloomData := suite.createBloomFilterBytes("key1", "key2")
 
 	etag := "etag-new-456"
+	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
 	suite.daoFactory.EXPECT().
-		GetS3Object(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/test_model.bloom").
+		GetS3ObjectIfChanged(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/test_model.bloom", mock.Anything).
 		Return(&s3.GetObjectOutput{
 			ETag: &etag,
 			Body: io.NopCloser(strings.NewReader("")),
-		}, nil).Once()
+		}, false, nil).Once()
 
 	// ShouldRefresh returns true — ETag changed
 	suite.localCacheFactory.EXPECT().
@@ -175,6 +177,37 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_StoresFilterOnSucce
 	suite.True(filter.MightContain("key2"))
 }
 
+func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_NotModifiedSkipsDownload() {
+	fixedTime := time.Date(2024, 3, 15, 14, 0, 0, 0, time.UTC)
+	suite.timeProvider.EXPECT().Now().Return(fixedTime).Once()
+
+	modelDef := interfaces.ModelDefinition{
+		Identifier: "existing_model",
+		S3PathMode: interfaces.S3PathModeDynamic,
+	}
+
+	existingFilter, err := bloom.NewBloomFilter(100, 0.01)
+	suite.Require().NoError(err)
+	existingFilter.Put("existing_key")
+	suite.store.Put("existing_model", existingFilter)
+
+	etag := "etag-cached-789"
+	suite.localCacheFactory.EXPECT().
+		GetFromLocalCache(repository.CacheNameFileIdentifier, CacheKeyBloomFilterFileIdentifier+"_existing_model").
+		Return(etag, true).Once()
+	suite.daoFactory.EXPECT().
+		GetS3ObjectIfChanged(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/existing_model.bloom", etag).
+		Return(nil, true, nil).Once()
+
+	// No ShouldRefresh or ReadContent expectation: the mocks fail the test if either is called.
+	loadErr := suite.loader.loadSingleModel("test_ssp", repository.S3Prefix+"test-bucket", "existing_model", modelDef)
+
+	suite.NoError(loadErr)
+	filter, found := suite.store.Get("existing_model")
+	suite.True(found)
+	suite.Same(existingFilter, filter)
+}
+
 func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_PreservesExistingStateOnS3NotFoundError() {
 	fixedTime := time.Date(2024, 3, 15, 14, 0, 0, 0, time.UTC)
 	suite.timeProvider.EXPECT().Now().Return(fixedTime).Once()
@@ -191,9 +224,10 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_PreservesExistingSt
 	suite.store.Put("existing_model", existingFilter)
 
 	// S3 returns not-found error
+	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
 	suite.daoFactory.EXPECT().
-		GetS3Object(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/existing_model.bloom").
-		Return(nil, fmt.Errorf("NoSuchKey: The specified key does not exist")).Once()
+		GetS3ObjectIfChanged(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/existing_model.bloom", mock.Anything).
+		Return(nil, false, fmt.Errorf("NoSuchKey: The specified key does not exist")).Once()
 
 	loadErr := suite.loader.loadSingleModel("test_ssp", repository.S3Prefix+"test-bucket", "existing_model", modelDef)
 
@@ -224,12 +258,13 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_PreservesExistingSt
 	suite.store.Put("existing_model", existingFilter)
 
 	etag := "etag-new-789"
+	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
 	suite.daoFactory.EXPECT().
-		GetS3Object(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/existing_model.bloom").
+		GetS3ObjectIfChanged(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/existing_model.bloom", mock.Anything).
 		Return(&s3.GetObjectOutput{
 			ETag: &etag,
 			Body: io.NopCloser(strings.NewReader("")),
-		}, nil).Once()
+		}, false, nil).Once()
 
 	// ShouldRefresh returns true — ETag changed
 	suite.localCacheFactory.EXPECT().
@@ -283,12 +318,13 @@ func (suite *BloomFilterLoaderTestSuite) TestLoad_SkipsNonBloomFilterModels() {
 	// Only bloom_model should trigger S3 interaction — STATIC mode so no time needed
 	bloomData := suite.createBloomFilterBytes("bloom_key")
 	etag := "etag-bloom"
+	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
 	suite.daoFactory.EXPECT().
-		GetS3Object(mock.Anything, "my-bucket", "test_ssp/models/bloom_model.bloom").
+		GetS3ObjectIfChanged(mock.Anything, "my-bucket", "test_ssp/models/bloom_model.bloom", mock.Anything).
 		Return(&s3.GetObjectOutput{
 			ETag: &etag,
 			Body: io.NopCloser(strings.NewReader("")),
-		}, nil).Once()
+		}, false, nil).Once()
 
 	suite.localCacheFactory.EXPECT().
 		ShouldRefresh(CacheKeyBloomFilterFileIdentifier+"_bloom_model", etag).

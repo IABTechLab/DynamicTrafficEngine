@@ -115,14 +115,17 @@ func (t *ModelResultHandler) loadSingleModel(sspIdentifier string, modelIdentifi
 	if strings.HasPrefix(t.folderPrefix, repository.S3Prefix) {
 		// get bucket name from "s3://<bucket-name>"
 		s3BucketName := strings.TrimPrefix(t.folderPrefix, repository.S3Prefix)
-		getObjectOutput, s3Error := t.daoFactory.GetS3Object(context.TODO(), s3BucketName, modelResultFileName)
+		getObjectOutput, notModified, s3Error := t.daoFactory.GetS3ObjectIfChanged(context.TODO(), s3BucketName, modelResultFileName, repository.CachedFileIdentifier(t.localCacheFactory, repository.CacheKeyModelResultFileIdentifier))
 		if s3Error != nil {
 			Logger.Error().Msgf("Error fetching S3 file %s/%s: %v", s3BucketName, modelResultFileName, s3Error)
 			return nil
 		}
+		if notModified {
+			Logger.Info().Msgf("Skipping refresh for %s", modelResultFileName)
+			return nil
+		}
 
 		defer func() {
-			_, _ = io.Copy(io.Discard, getObjectOutput.Body)
 			_ = getObjectOutput.Body.Close()
 		}()
 

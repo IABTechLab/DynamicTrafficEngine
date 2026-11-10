@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
@@ -71,18 +73,32 @@ func (t *DaoFactory) ReadContent(data io.ReadCloser) ([]byte, error) {
 
 // GetS3Object retrieves data from an S3 bucket
 func (t *DaoFactory) GetS3Object(ctx context.Context, bucket string, key string) (*s3.GetObjectOutput, error) {
+	result, _, err := t.GetS3ObjectIfChanged(ctx, bucket, key, "")
+	return result, err
+}
+
+// GetS3ObjectIfChanged retrieves an S3 object unless its ETag equals knownETag.
+// It sends knownETag as If-None-Match, so S3 answers an unchanged object with 304 and no body;
+// that is reported as notModified with no error. An empty knownETag sends a plain GetObject.
+func (t *DaoFactory) GetS3ObjectIfChanged(ctx context.Context, bucket string, key string, knownETag string) (*s3.GetObjectOutput, bool, error) {
 	Logger.Info().Msgf("bucket [%s], key [%s]", bucket, key)
 	input := &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	}
+	if knownETag != "" {
+		input.IfNoneMatch = aws.String(knownETag)
+	}
 	result, err := t.s3Client.GetObject(ctx, input)
 	if err != nil {
+		var responseError *awshttp.ResponseError
+		if errors.As(err, &responseError) && responseError.HTTPStatusCode() == http.StatusNotModified {
+			return nil, true, nil
+		}
 		handleS3Error(err)
-		return nil, fmt.Errorf("failed to get object from S3: %w", err)
-
+		return nil, false, fmt.Errorf("failed to get object from S3: %w", err)
 	}
-	return result, nil
+	return result, false, nil
 }
 
 func handleS3Error(err error) error {

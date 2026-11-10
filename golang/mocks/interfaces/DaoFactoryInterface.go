@@ -157,6 +157,71 @@ func (_c *DaoFactoryInterface_GetS3Object_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
+// GetS3ObjectIfChanged provides a mock function for the type DaoFactoryInterface
+func (_mock *DaoFactoryInterface) GetS3ObjectIfChanged(ctx context.Context, bucket string, key string, knownETag string) (*s3.GetObjectOutput, bool, error) {
+	ret := _mock.Called(ctx, bucket, key, knownETag)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetS3ObjectIfChanged")
+	}
+
+	var r0 *s3.GetObjectOutput
+	var r1 bool
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) (*s3.GetObjectOutput, bool, error)); ok {
+		return returnFunc(ctx, bucket, key, knownETag)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) *s3.GetObjectOutput); ok {
+		r0 = returnFunc(ctx, bucket, key, knownETag)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*s3.GetObjectOutput)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) bool); ok {
+		r1 = returnFunc(ctx, bucket, key, knownETag)
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, string, string) error); ok {
+		r2 = returnFunc(ctx, bucket, key, knownETag)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
+}
+
+// DaoFactoryInterface_GetS3ObjectIfChanged_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetS3ObjectIfChanged'
+type DaoFactoryInterface_GetS3ObjectIfChanged_Call struct {
+	*mock.Call
+}
+
+// GetS3ObjectIfChanged is a helper method to define mock.On call
+//   - ctx
+//   - bucket
+//   - key
+//   - knownETag
+func (_e *DaoFactoryInterface_Expecter) GetS3ObjectIfChanged(ctx interface{}, bucket interface{}, key interface{}, knownETag interface{}) *DaoFactoryInterface_GetS3ObjectIfChanged_Call {
+	return &DaoFactoryInterface_GetS3ObjectIfChanged_Call{Call: _e.mock.On("GetS3ObjectIfChanged", ctx, bucket, key, knownETag)}
+}
+
+func (_c *DaoFactoryInterface_GetS3ObjectIfChanged_Call) Run(run func(ctx context.Context, bucket string, key string, knownETag string)) *DaoFactoryInterface_GetS3ObjectIfChanged_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string))
+	})
+	return _c
+}
+
+func (_c *DaoFactoryInterface_GetS3ObjectIfChanged_Call) Return(output *s3.GetObjectOutput, notModified bool, err error) *DaoFactoryInterface_GetS3ObjectIfChanged_Call {
+	_c.Call.Return(output, notModified, err)
+	return _c
+}
+
+func (_c *DaoFactoryInterface_GetS3ObjectIfChanged_Call) RunAndReturn(run func(ctx context.Context, bucket string, key string, knownETag string) (*s3.GetObjectOutput, bool, error)) *DaoFactoryInterface_GetS3ObjectIfChanged_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ReadContent provides a mock function for the type DaoFactoryInterface
 func (_mock *DaoFactoryInterface) ReadContent(data io.ReadCloser) ([]byte, error) {
 	ret := _mock.Called(data)
