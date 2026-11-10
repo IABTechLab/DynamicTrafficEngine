@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
 const S3Prefix = "s3://"
@@ -71,18 +73,27 @@ func (t *DaoFactory) ReadContent(data io.ReadCloser) ([]byte, error) {
 
 // GetS3Object retrieves data from an S3 bucket
 func (t *DaoFactory) GetS3Object(ctx context.Context, bucket string, key string) (*s3.GetObjectOutput, error) {
+	result, _, err := t.GetS3ObjectIfChanged(ctx, bucket, key, "")
+	return result, err
+}
+
+// GetS3ObjectIfChanged uses a conditional GET to avoid downloading an unchanged body.
+func (t *DaoFactory) GetS3ObjectIfChanged(ctx context.Context, bucket, key, etag string) (*s3.GetObjectOutput, bool, error) {
 	Logger.Info().Msgf("bucket [%s], key [%s]", bucket, key)
-	input := &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
+	input := &s3.GetObjectInput{Bucket: aws.String(bucket), Key: aws.String(key)}
+	if etag != "" {
+		input.IfNoneMatch = aws.String(etag)
 	}
 	result, err := t.s3Client.GetObject(ctx, input)
 	if err != nil {
+		var responseError *smithyhttp.ResponseError
+		if etag != "" && errors.As(err, &responseError) && responseError.HTTPStatusCode() == http.StatusNotModified {
+			return nil, true, nil
+		}
 		handleS3Error(err)
-		return nil, fmt.Errorf("failed to get object from S3: %w", err)
-
+		return nil, false, fmt.Errorf("failed to get object from S3: %w", err)
 	}
-	return result, nil
+	return result, false, nil
 }
 
 func handleS3Error(err error) error {

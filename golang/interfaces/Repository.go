@@ -63,6 +63,13 @@ type DaoFactoryInterface interface {
 	// Read the contents of an S3 object.
 	ReadContent(data io.ReadCloser) ([]byte, error)
 
-	// Fetch the metadata of an S3 object. This does not fetch the contents of the object.
+	// Fetch an S3 object, including its streaming response body.
 	GetS3Object(ctx context.Context, bucket string, key string) (*s3.GetObjectOutput, error)
+}
+
+// ConditionalS3ObjectFetcher optionally avoids transferring an unchanged object.
+// A matching ETag returns (nil, true, nil). An empty ETag fetches unconditionally.
+// DaoFactoryInterface stays compatible with existing custom implementations.
+type ConditionalS3ObjectFetcher interface {
+	GetS3ObjectIfChanged(ctx context.Context, bucket, key, etag string) (*s3.GetObjectOutput, bool, error)
 }

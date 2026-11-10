@@ -6,10 +6,11 @@ package bloomfilter
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
+	"sync"
 
 	bloom "github.com/OldPanda/bloomfilter"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/rs/zerolog"
 	"golang.a2z.com/demanddriventrafficevaluator/interfaces"
 	"golang.a2z.com/demanddriventrafficevaluator/repository"
@@ -23,19 +24,27 @@ func init() {
 	util.WithComponent("bloomfilter")
 }
 
-// CacheKeyBloomFilterFileIdentifier is the cache key prefix used for bloom filter ETag tracking.
+// CacheKeyBloomFilterFileIdentifier is retained for compatibility.
+// Bloom filter validators now live with the loader and its installed filters.
 const CacheKeyBloomFilterFileIdentifier = "BloomFilterFileIdentifier"
+
+type loadedBloomFilter struct {
+	bucket, key, etag string
+	filter            *bloom.BloomFilter
+}
 
 // BloomFilterLoader loads bloom filter models from S3 into the BloomFilterStore.
 type BloomFilterLoader struct {
+	mu                        sync.Mutex
+	loaded                    map[string]loadedBloomFilter
 	store                     *BloomFilterStore
 	daoFactory                interfaces.DaoFactoryInterface
-	localCacheFactory         interfaces.LocalCacheFactoryInterface
 	modelConfigurationHandler interfaces.ModelConfigurationHandlerInterface
 	timeProvider              interfaces.TimeProvider
 }
 
-// NewBloomFilterLoader creates a new BloomFilterLoader with all required dependencies.
+// NewBloomFilterLoader creates a new BloomFilterLoader.
+// localCacheFactory is retained for compatibility; validators are tracked by the loader.
 func NewBloomFilterLoader(
 	store *BloomFilterStore,
 	daoFactory interfaces.DaoFactoryInterface,
@@ -46,7 +55,7 @@ func NewBloomFilterLoader(
 	return &BloomFilterLoader{
 		store:                     store,
 		daoFactory:                daoFactory,
-		localCacheFactory:         localCacheFactory,
+		loaded:                    make(map[string]loadedBloomFilter),
 		modelConfigurationHandler: modelConfigurationHandler,
 		timeProvider:              timeProvider,
 	}
@@ -76,9 +85,11 @@ func (l *BloomFilterLoader) Load(sspIdentifier string, folderPrefix string) erro
 }
 
 // loadSingleModel loads a single bloom filter model from S3 into the store.
-// It resolves the S3 path, fetches the object, checks ETag via ShouldRefresh,
+// It resolves the S3 path and conditionally fetches the object, then
 // deserializes using OldPanda bloomfilter.FromBytes(), and stores the result.
 func (l *BloomFilterLoader) loadSingleModel(sspIdentifier string, folderPrefix string, modelIdentifier string, modelDef interfaces.ModelDefinition) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	s3Path := l.BuildS3Path(sspIdentifier, modelDef)
 
 	if !strings.HasPrefix(folderPrefix, repository.S3Prefix) {
@@ -86,22 +97,41 @@ func (l *BloomFilterLoader) loadSingleModel(sspIdentifier string, folderPrefix s
 	}
 
 	s3BucketName := strings.TrimPrefix(folderPrefix, repository.S3Prefix)
-	getObjectOutput, err := l.daoFactory.GetS3Object(context.TODO(), s3BucketName, s3Path)
+	previous := l.loaded[modelIdentifier]
+	current, present := l.store.Get(modelIdentifier)
+	etag := ""
+	if present && current == previous.filter && previous.bucket == s3BucketName && previous.key == s3Path {
+		etag = previous.etag
+	}
+	var getObjectOutput *s3.GetObjectOutput
+	var err error
+	if conditional, ok := l.daoFactory.(interfaces.ConditionalS3ObjectFetcher); ok {
+		var unchanged bool
+		getObjectOutput, unchanged, err = conditional.GetS3ObjectIfChanged(context.TODO(), s3BucketName, s3Path, etag)
+		if err == nil && unchanged {
+			if current, present := l.store.Get(modelIdentifier); etag != "" && present && current == previous.filter {
+				return nil
+			}
+			// The filter was evicted while the request was in flight. Reload its body.
+			getObjectOutput, err = l.daoFactory.GetS3Object(context.TODO(), s3BucketName, s3Path)
+		}
+	} else {
+		getObjectOutput, err = l.daoFactory.GetS3Object(context.TODO(), s3BucketName, s3Path)
+	}
 	if err != nil {
 		loaderLogger.Warn().Msgf("Bloom filter file not found or S3 error for %s/%s: %v", s3BucketName, s3Path, err)
 		return fmt.Errorf("error fetching bloom filter S3 file %s/%s: %w", s3BucketName, s3Path, err)
 	}
 
-	defer func() {
-		_, _ = io.Copy(io.Discard, getObjectOutput.Body)
-		_ = getObjectOutput.Body.Close()
-	}()
-
-	// Use a per-model cache key for ETag change detection
-	cacheKey := CacheKeyBloomFilterFileIdentifier + "_" + modelIdentifier
-	if !l.localCacheFactory.ShouldRefresh(cacheKey, *(getObjectOutput.ETag)) {
-		loaderLogger.Info().Msgf("Skipping bloom filter refresh for %s (ETag unchanged)", modelIdentifier)
-		return nil
+	if getObjectOutput == nil || getObjectOutput.Body == nil {
+		return fmt.Errorf("missing bloom filter body for %s", modelIdentifier)
+	}
+	// Close without draining: draining an unchanged fallback response downloads it.
+	defer getObjectOutput.Body.Close()
+	if etag != "" && getObjectOutput.ETag != nil && *getObjectOutput.ETag == etag {
+		if current, present := l.store.Get(modelIdentifier); present && current == previous.filter {
+			return nil
+		}
 	}
 
 	content, err := l.daoFactory.ReadContent(getObjectOutput.Body)
@@ -115,6 +145,12 @@ func (l *BloomFilterLoader) loadSingleModel(sspIdentifier string, folderPrefix s
 	}
 
 	l.store.Put(modelIdentifier, filter)
+	// Commit the validator only after a successful decode and store replacement.
+	next := loadedBloomFilter{bucket: s3BucketName, key: s3Path, filter: filter}
+	if getObjectOutput.ETag != nil {
+		next.etag = *getObjectOutput.ETag
+	}
+	l.loaded[modelIdentifier] = next
 	loaderLogger.Info().Msgf("Successfully loaded bloom filter for model [%s]", modelIdentifier)
 
 	return nil
