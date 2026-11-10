@@ -103,36 +103,6 @@ func (suite *BloomFilterLoaderTestSuite) TestBuildS3Path_EmptyS3PathMode_Default
 
 // --- loadSingleModel Tests ---
 
-func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_SkipsWhenETagUnchanged() {
-	fixedTime := time.Date(2024, 3, 15, 14, 0, 0, 0, time.UTC)
-	suite.timeProvider.EXPECT().Now().Return(fixedTime).Once()
-
-	modelDef := interfaces.ModelDefinition{
-		Identifier: "test_model",
-		S3PathMode: interfaces.S3PathModeDynamic,
-	}
-
-	etag := "etag-unchanged-123"
-	suite.daoFactory.EXPECT().
-		GetS3Object(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/test_model.bloom").
-		Return(&s3.GetObjectOutput{
-			ETag: &etag,
-			Body: io.NopCloser(strings.NewReader("")),
-		}, nil).Once()
-
-	// ShouldRefresh returns false — ETag unchanged
-	suite.localCacheFactory.EXPECT().
-		ShouldRefresh(CacheKeyBloomFilterFileIdentifier+"_test_model", etag).
-		Return(false).Once()
-
-	err := suite.loader.loadSingleModel("test_ssp", repository.S3Prefix+"test-bucket", "test_model", modelDef)
-
-	suite.NoError(err)
-	// Verify store was NOT updated (no filter stored)
-	_, found := suite.store.Get("test_model")
-	suite.False(found)
-}
-
 func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_StoresFilterOnSuccessfulLoad() {
 	fixedTime := time.Date(2024, 3, 15, 14, 0, 0, 0, time.UTC)
 	suite.timeProvider.EXPECT().Now().Return(fixedTime).Once()
@@ -152,11 +122,6 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_StoresFilterOnSucce
 			ETag: &etag,
 			Body: io.NopCloser(strings.NewReader("")),
 		}, nil).Once()
-
-	// ShouldRefresh returns true — ETag changed
-	suite.localCacheFactory.EXPECT().
-		ShouldRefresh(CacheKeyBloomFilterFileIdentifier+"_test_model", etag).
-		Return(true).Once()
 
 	// ReadContent returns valid bloom filter bytes
 	suite.daoFactory.EXPECT().
@@ -231,11 +196,6 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_PreservesExistingSt
 			Body: io.NopCloser(strings.NewReader("")),
 		}, nil).Once()
 
-	// ShouldRefresh returns true — ETag changed
-	suite.localCacheFactory.EXPECT().
-		ShouldRefresh(CacheKeyBloomFilterFileIdentifier+"_existing_model", etag).
-		Return(true).Once()
-
 	// ReadContent returns invalid bytes that can't be deserialized
 	suite.daoFactory.EXPECT().
 		ReadContent(mock.Anything).
@@ -289,10 +249,6 @@ func (suite *BloomFilterLoaderTestSuite) TestLoad_SkipsNonBloomFilterModels() {
 			ETag: &etag,
 			Body: io.NopCloser(strings.NewReader("")),
 		}, nil).Once()
-
-	suite.localCacheFactory.EXPECT().
-		ShouldRefresh(CacheKeyBloomFilterFileIdentifier+"_bloom_model", etag).
-		Return(true).Once()
 
 	suite.daoFactory.EXPECT().
 		ReadContent(mock.Anything).
