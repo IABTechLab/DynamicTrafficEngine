@@ -4,12 +4,14 @@
 package com.amazon.demanddriventrafficevaluator.repository.loader.model;
 
 import com.amazon.demanddriventrafficevaluator.factory.DefaultLocalCacheRegistryFactory;
+import com.amazon.demanddriventrafficevaluator.repository.dao.ConditionalGetResult;
 import com.amazon.demanddriventrafficevaluator.repository.dao.Dao;
 import com.amazon.demanddriventrafficevaluator.repository.dao.LocalCacheDao;
 import com.amazon.demanddriventrafficevaluator.repository.entity.ModelValueType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Answers;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Spy;
@@ -35,7 +37,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyDouble;
 import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
@@ -50,7 +54,8 @@ class RuleBasedModelResultLoaderTest {
     private Dao<String, String> mockFileIdentifierCacheDao;
     @Spy
     private Dao<String, Double> spyModelResultsCacheDao = new LocalCacheDao<>(DefaultLocalCacheRegistryFactory.getInstance().getDefaultLocalCacheRegistrySingleton());
-    @Mock
+    // CALLS_REAL_METHODS: the default Dao.getIfChanged delegates to the stubbed get().
+    @Mock(answer = Answers.CALLS_REAL_METHODS)
     private Dao<String, InputStream> mockFileDao;
 
     private RuleBasedModelResultLoader loader;
@@ -242,6 +247,25 @@ class RuleBasedModelResultLoaderTest {
             assertTrue(spyModelResultsCacheDao.get("testModel", modelResult3).isEmpty());
             verify(mockFileIdentifierCacheDao).put("model-results-identifier", "testModel", "eTag2");
         }
+    }
+
+    @Test
+    void testLoad_NotModified_SkipsWithoutDownloading() {
+        // Arrange
+        ModelResultLoaderInput input = new ModelResultLoaderInput("testBucket", "testKey", "testVendor", "testModel", ModelValueType.LowValue);
+        when(mockFileIdentifierCacheDao.get("model-results-identifier", "testModel")).thenReturn(Optional.of("ETag"));
+        doReturn(ConditionalGetResult.notModified()).when(mockFileDao)
+                .getIfChanged(eq("testBucket"), anyString(), eq("ETag"));
+
+        // Act
+        boolean result = loader.load(input);
+
+        // Assert
+        assertFalse(result);
+        verify(mockFileDao, never()).get(anyString(), anyString());
+        verify(spyModelResultsCacheDao, never()).put(anyString(), anyString(), anyDouble());
+        verify(spyModelResultsCacheDao, never()).clear(anyString());
+        verify(mockFileIdentifierCacheDao, never()).put(anyString(), anyString(), anyString());
     }
 
     @Test

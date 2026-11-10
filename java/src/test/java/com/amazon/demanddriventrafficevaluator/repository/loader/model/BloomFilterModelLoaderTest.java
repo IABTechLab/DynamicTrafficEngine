@@ -3,6 +3,7 @@
 
 package com.amazon.demanddriventrafficevaluator.repository.loader.model;
 
+import com.amazon.demanddriventrafficevaluator.repository.dao.ConditionalGetResult;
 import com.amazon.demanddriventrafficevaluator.repository.dao.Dao;
 import com.amazon.demanddriventrafficevaluator.repository.entity.ModelValueType;
 import com.amazon.demanddriventrafficevaluator.repository.entity.S3PathMode;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.Answers;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -36,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
@@ -49,7 +52,8 @@ class BloomFilterModelLoaderTest {
     private Dao<String, String> mockFileIdentifierCacheDao;
     @Mock
     private Dao<String, BloomFilter<String>> mockBloomFilterDao;
-    @Mock
+    // CALLS_REAL_METHODS: the default Dao.getIfChanged delegates to the stubbed get().
+    @Mock(answer = Answers.CALLS_REAL_METHODS)
     private Dao<String, InputStream> mockFileDao;
 
     private BloomFilterModelLoader loader;
@@ -210,6 +214,27 @@ class BloomFilterModelLoaderTest {
             // Assert
             assertFalse(result);
             verify(mockBloomFilterDao, never()).put(anyString(), anyString(), org.mockito.ArgumentMatchers.any());
+        }
+
+        @Test
+        void testLoad_NotModified_SkipsWithoutDownloading() {
+            // Arrange
+            ModelResultLoaderInput input = new ModelResultLoaderInput(
+                    "testBucket", "testKey", "testVendor", "testModel",
+                    ModelValueType.LowValue, S3PathMode.STATIC);
+            when(mockFileIdentifierCacheDao.get("model-results-identifier", "testModel"))
+                    .thenReturn(Optional.of("sameETag"));
+            doReturn(ConditionalGetResult.notModified()).when(mockFileDao)
+                    .getIfChanged("testBucket", "testVendor/models/testKey.bloom", "sameETag");
+
+            // Act
+            boolean result = loader.load(input);
+
+            // Assert
+            assertFalse(result);
+            verify(mockFileDao, never()).get(anyString(), anyString());
+            verify(mockBloomFilterDao, never()).put(anyString(), anyString(), org.mockito.ArgumentMatchers.any());
+            verify(mockFileIdentifierCacheDao, never()).put(anyString(), anyString(), anyString());
         }
 
         @Test
