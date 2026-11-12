@@ -4,6 +4,7 @@
 package modelfeature
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -68,7 +69,7 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_S3_Success() {
 	suite.modelResultHandler = NewModelResultHandler("ssp", suite.s3FolderPrefix, suite.daoFactory, suite.modelConfigurationHandler, suite.localCacheFactory, suite.timeProvider)
 
 	suite.modelConfigurationHandler.EXPECT().Provide().Return(&suite.modelConfiguration, nil).Once()
-	suite.localCacheFactory.EXPECT().ShouldRefresh(repository.CacheKeyModelResultFileIdentifier, mock.Anything).Return(true).Once()
+	suite.localCacheFactory.EXPECT().ShouldRefresh(repository.ModelResultFileIdentifierCacheKey("adsp_low-value_v2"), mock.Anything).Return(true).Once()
 	suite.localCacheFactory.EXPECT().PutToLocalCache(mock.Anything, mock.Anything, mock.Anything).Return(true).Times(4)
 	suite.localCacheFactory.EXPECT().ClearLocalCache(mock.Anything).Return()
 	suite.daoFactory.EXPECT().GetS3Object(mock.Anything, mock.Anything, mock.Anything).Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).Once()
@@ -104,7 +105,7 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_S3_Success_InvalidModelDefini
 	modelDef.Type = "invalidType"
 	modelConfiguration.ModelDefinitionByIdentifier["adsp_low-value_v2"] = modelDef
 	suite.modelConfigurationHandler.EXPECT().Provide().Return(&modelConfiguration, nil).Once()
-	suite.localCacheFactory.EXPECT().ShouldRefresh(repository.CacheKeyModelResultFileIdentifier, mock.Anything).Return(true).Once()
+	suite.localCacheFactory.EXPECT().ShouldRefresh(repository.ModelResultFileIdentifierCacheKey("adsp_low-value_v2"), mock.Anything).Return(true).Once()
 	suite.localCacheFactory.EXPECT().PutToLocalCache(mock.Anything, mock.Anything, mock.Anything).Return(true).Times(4)
 	suite.localCacheFactory.EXPECT().ClearLocalCache(mock.Anything).Return()
 	suite.daoFactory.EXPECT().GetS3Object(mock.Anything, mock.Anything, mock.Anything).Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).Once()
@@ -130,7 +131,7 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_S3_Success_ShouldNotRefresh()
 	suite.modelResultHandler = NewModelResultHandler("ssp", suite.s3FolderPrefix, suite.daoFactory, suite.modelConfigurationHandler, suite.localCacheFactory, suite.timeProvider)
 
 	suite.modelConfigurationHandler.EXPECT().Provide().Return(&suite.modelConfiguration, nil).Once()
-	suite.localCacheFactory.EXPECT().ShouldRefresh(repository.CacheKeyModelResultFileIdentifier, mock.Anything).Return(false).Once()
+	suite.localCacheFactory.EXPECT().ShouldRefresh(repository.ModelResultFileIdentifierCacheKey("adsp_low-value_v2"), mock.Anything).Return(false).Once()
 	suite.daoFactory.EXPECT().GetS3Object(mock.Anything, mock.Anything, mock.Anything).Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).Once()
 
 	err := suite.modelResultHandler.Load("ssp")
@@ -142,7 +143,7 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_S3_ReturnError_ReadContentErr
 	suite.modelResultHandler = NewModelResultHandler("ssp", suite.s3FolderPrefix, suite.daoFactory, suite.modelConfigurationHandler, suite.localCacheFactory, suite.timeProvider)
 
 	suite.modelConfigurationHandler.EXPECT().Provide().Return(&suite.modelConfiguration, nil).Once()
-	suite.localCacheFactory.EXPECT().ShouldRefresh(repository.CacheKeyModelResultFileIdentifier, mock.Anything).Return(true).Once()
+	suite.localCacheFactory.EXPECT().ShouldRefresh(repository.ModelResultFileIdentifierCacheKey("adsp_low-value_v2"), mock.Anything).Return(true).Once()
 	suite.daoFactory.EXPECT().GetS3Object(mock.Anything, mock.Anything, mock.Anything).Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).Once()
 	suite.daoFactory.EXPECT().ReadContent(mock.Anything).Return(nil, fmt.Errorf("ReadContent Error")).Once()
 
@@ -155,7 +156,7 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_S3_Success_PutToLocalCacheFai
 	suite.modelResultHandler = NewModelResultHandler("ssp", suite.s3FolderPrefix, suite.daoFactory, suite.modelConfigurationHandler, suite.localCacheFactory, suite.timeProvider)
 
 	suite.modelConfigurationHandler.EXPECT().Provide().Return(&suite.modelConfiguration, nil).Once()
-	suite.localCacheFactory.EXPECT().ShouldRefresh(repository.CacheKeyModelResultFileIdentifier, mock.Anything).Return(true).Once()
+	suite.localCacheFactory.EXPECT().ShouldRefresh(repository.ModelResultFileIdentifierCacheKey("adsp_low-value_v2"), mock.Anything).Return(true).Once()
 	suite.daoFactory.EXPECT().GetS3Object(mock.Anything, mock.Anything, mock.Anything).Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).Once()
 	suite.daoFactory.EXPECT().ReadContent(mock.Anything).Return(suite.modelResultData, nil).Once()
 	suite.localCacheFactory.EXPECT().PutToLocalCache(mock.Anything, mock.Anything, mock.Anything).Return(false).Times(4)
@@ -168,7 +169,7 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_S3_Success_PutToLocalCacheFai
 
 func (suite *ModelResultHandlerTestSuite) TestLoad_Success() {
 	suite.modelConfigurationHandler.EXPECT().Provide().Return(&suite.modelConfiguration, nil).Once()
-	suite.localCacheFactory.EXPECT().ShouldRefreshLocal(repository.CacheKeyModelResultFileIdentifier, mock.Anything).Return(true).Once()
+	suite.localCacheFactory.EXPECT().ShouldRefreshLocal(repository.ModelResultFileIdentifierCacheKey("adsp_low-value_v2"), mock.Anything).Return(true).Once()
 	suite.localCacheFactory.EXPECT().PutToLocalCache(mock.Anything, mock.Anything, mock.Anything).Return(true).Times(4)
 	suite.localCacheFactory.EXPECT().ClearLocalCache(mock.Anything).Return()
 	suite.daoFactory.EXPECT().GetDataFromLocal(mock.Anything).Return(suite.modelResultData, nil).Once()
@@ -199,7 +200,7 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_Success_InvalidModelDefinitio
 	modelDef.Type = "invalidType"
 	modelConfiguration.ModelDefinitionByIdentifier["adsp_low-value_v2"] = modelDef
 	suite.modelConfigurationHandler.EXPECT().Provide().Return(&modelConfiguration, nil).Once()
-	suite.localCacheFactory.EXPECT().ShouldRefreshLocal(repository.CacheKeyModelResultFileIdentifier, mock.Anything).Return(true).Once()
+	suite.localCacheFactory.EXPECT().ShouldRefreshLocal(repository.ModelResultFileIdentifierCacheKey("adsp_low-value_v2"), mock.Anything).Return(true).Once()
 	suite.localCacheFactory.EXPECT().PutToLocalCache(mock.Anything, mock.Anything, mock.Anything).Return(true).Times(4)
 	suite.localCacheFactory.EXPECT().ClearLocalCache(mock.Anything).Return()
 	suite.daoFactory.EXPECT().GetDataFromLocal(mock.Anything).Return(suite.modelResultData, nil).Once()
@@ -219,7 +220,7 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_Success_FileNotFound() {
 
 func (suite *ModelResultHandlerTestSuite) TestLoad_Success_ShouldNotRefresh() {
 	suite.modelConfigurationHandler.EXPECT().Provide().Return(&suite.modelConfiguration, nil).Once()
-	suite.localCacheFactory.EXPECT().ShouldRefreshLocal(repository.CacheKeyModelResultFileIdentifier, mock.Anything).Return(false).Once()
+	suite.localCacheFactory.EXPECT().ShouldRefreshLocal(repository.ModelResultFileIdentifierCacheKey("adsp_low-value_v2"), mock.Anything).Return(false).Once()
 
 	err := suite.modelResultHandler.Load("ssp")
 
@@ -228,7 +229,7 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_Success_ShouldNotRefresh() {
 
 func (suite *ModelResultHandlerTestSuite) TestLoad_ReturnError_GetDataFromLocalError() {
 	suite.modelConfigurationHandler.EXPECT().Provide().Return(&suite.modelConfiguration, nil).Once()
-	suite.localCacheFactory.EXPECT().ShouldRefreshLocal(repository.CacheKeyModelResultFileIdentifier, mock.Anything).Return(true).Once()
+	suite.localCacheFactory.EXPECT().ShouldRefreshLocal(repository.ModelResultFileIdentifierCacheKey("adsp_low-value_v2"), mock.Anything).Return(true).Once()
 	suite.daoFactory.EXPECT().GetDataFromLocal(mock.Anything).Return(nil, fmt.Errorf("GetDataFromLocalError")).Once()
 
 	err := suite.modelResultHandler.Load("ssp")
@@ -238,7 +239,7 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_ReturnError_GetDataFromLocalE
 
 func (suite *ModelResultHandlerTestSuite) TestLoad_Success_PutToLocalCacheFail() {
 	suite.modelConfigurationHandler.EXPECT().Provide().Return(&suite.modelConfiguration, nil).Once()
-	suite.localCacheFactory.EXPECT().ShouldRefreshLocal(repository.CacheKeyModelResultFileIdentifier, mock.Anything).Return(true).Once()
+	suite.localCacheFactory.EXPECT().ShouldRefreshLocal(repository.ModelResultFileIdentifierCacheKey("adsp_low-value_v2"), mock.Anything).Return(true).Once()
 	suite.localCacheFactory.EXPECT().PutToLocalCache(mock.Anything, mock.Anything, mock.Anything).Return(false).Times(4)
 	suite.localCacheFactory.EXPECT().ClearLocalCache(mock.Anything).Return()
 	suite.daoFactory.EXPECT().GetDataFromLocal(mock.Anything).Return(suite.modelResultData, nil).Once()
@@ -293,7 +294,7 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_CacheValueByModelType() {
 				},
 			}
 			modelConfigHandler.EXPECT().Provide().Return(&modelConfig, nil).Once()
-			localCache.EXPECT().ShouldRefreshLocal(repository.CacheKeyModelResultFileIdentifier, mock.Anything).Return(true).Once()
+			localCache.EXPECT().ShouldRefreshLocal(repository.ModelResultFileIdentifierCacheKey("adsp_low-value_v2"), mock.Anything).Return(true).Once()
 			localCache.EXPECT().ClearLocalCache("adsp_low-value_v2").Return()
 			daoFactory.EXPECT().GetDataFromLocal(mock.Anything).Return(suite.modelResultData, nil).Once()
 
@@ -331,7 +332,7 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_S3_SkipsBloomFilterModels() {
 
 	suite.modelConfigurationHandler.EXPECT().Provide().Return(&modelConfig, nil).Once()
 	// S3 fetch should only happen for the RULE_BASED model (once, not twice)
-	suite.localCacheFactory.EXPECT().ShouldRefresh(repository.CacheKeyModelResultFileIdentifier, mock.Anything).Return(true).Once()
+	suite.localCacheFactory.EXPECT().ShouldRefresh(repository.ModelResultFileIdentifierCacheKey("rule_based_model"), mock.Anything).Return(true).Once()
 	suite.localCacheFactory.EXPECT().PutToLocalCache(mock.Anything, mock.Anything, mock.Anything).Return(true).Times(4)
 	suite.localCacheFactory.EXPECT().ClearLocalCache(mock.Anything).Return()
 	suite.daoFactory.EXPECT().GetS3Object(mock.Anything, mock.Anything, mock.Anything).Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).Once()
@@ -789,4 +790,38 @@ func (suite *TransformTestSuite) TestTransform_Success_NoTransformations() {
 	// Assert
 	suite.NoError(err)
 	suite.Equal(feature, result)
+}
+
+// Regression test for issue #29: each rule-based model must track its own file identifier.
+// With a single shared key, every model overwrote the others' ETag, so the second Load
+// reloaded every model even though none of the files changed.
+func (suite *ModelResultHandlerTestSuite) TestLoad_S3_MultipleModels_UnchangedFilesNotReloaded() {
+	localCacheFactory := repository.NewLocalCacheFactory()
+	handler := NewModelResultHandler("ssp", suite.s3FolderPrefix, suite.daoFactory, suite.modelConfigurationHandler, localCacheFactory, suite.timeProvider)
+
+	modelConfig := interfaces.ModelConfiguration{
+		ModelDefinitionByIdentifier: map[string]interfaces.ModelDefinition{
+			"model_a": {Identifier: "model_a", Type: "LowValue", ModelFormat: interfaces.ModelFormatRuleBased},
+			"model_b": {Identifier: "model_b", Type: "LowValue", ModelFormat: interfaces.ModelFormatRuleBased},
+		},
+	}
+	suite.modelConfigurationHandler.EXPECT().Provide().Return(&modelConfig, nil).Times(2)
+
+	eTagByKey := map[string]string{
+		"ssp/2024-09-20/00/model_a.csv": "etag-a",
+		"ssp/2024-09-20/00/model_b.csv": "etag-b",
+	}
+	suite.daoFactory.EXPECT().GetS3Object(mock.Anything, "test-ssp", mock.Anything).RunAndReturn(
+		func(_ context.Context, _ string, key string) (*s3.GetObjectOutput, error) {
+			eTag, ok := eTagByKey[key]
+			if !ok {
+				return nil, fmt.Errorf("unexpected S3 key %s", key)
+			}
+			return &s3.GetObjectOutput{ETag: &eTag, Body: io.NopCloser(strings.NewReader(""))}, nil
+		}).Times(4) // 2 models x 2 loads
+	// File contents are read only on the first Load, once per model.
+	suite.daoFactory.EXPECT().ReadContent(mock.Anything).Return(suite.modelResultData, nil).Times(2)
+
+	suite.NoError(handler.Load("ssp"), "first load")
+	suite.NoError(handler.Load("ssp"), "second load")
 }

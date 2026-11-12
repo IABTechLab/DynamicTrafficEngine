@@ -401,6 +401,39 @@ func (suite *LocalCacheFactoryTestSuite) TestShouldRefresh() {
 	suite.mockRegistry.AssertExpectations(suite.T())
 }
 
+// Model result file identifiers (bare or per-model key) expire with the model data's default TTL.
+// All other file identifiers (configurations, bloom filters) never expire.
+func (suite *LocalCacheFactoryTestSuite) TestShouldRefresh_FileIdentifierTTLByKey() {
+	cache, _ := ristretto.NewCache[string, any](&ristretto.Config[string, any]{
+		NumCounters: 5000,
+		MaxCost:     100 << 20,
+		BufferItems: 32,
+	})
+	suite.mockRegistry.On("Get", CacheNameFileIdentifier).Return(cache, true)
+
+	for _, key := range []string{ModelResultFileIdentifierCacheKey("model_a"), CacheKeyModelResultFileIdentifier} {
+		assert.True(suite.T(), suite.factory.ShouldRefresh(key, "etag"), key)
+		ttl, found := cache.GetTTL(key)
+		assert.True(suite.T(), found, key)
+		assert.Greater(suite.T(), ttl, defaultTTL-time.Minute, key)
+		assert.LessOrEqual(suite.T(), ttl, defaultTTL, key)
+	}
+
+	for _, key := range []string{CacheKeyModelConfigurationFileIdentifier, CacheKeyExperimentConfigurationFileIdentifier, "BloomFilterFileIdentifier_model_a"} {
+		assert.True(suite.T(), suite.factory.ShouldRefresh(key, "etag"), key)
+		ttl, found := cache.GetTTL(key)
+		assert.True(suite.T(), found, key)
+		assert.Equal(suite.T(), time.Duration(0), ttl, key) // 0 with found=true means no expiration
+	}
+
+	suite.mockRegistry.AssertExpectations(suite.T())
+}
+
+func (suite *LocalCacheFactoryTestSuite) TestModelResultFileIdentifierCacheKey() {
+	assert.Equal(suite.T(), "ModelResultFileIdentifier_model_a", ModelResultFileIdentifierCacheKey("model_a"))
+	assert.NotEqual(suite.T(), ModelResultFileIdentifierCacheKey("model_a"), ModelResultFileIdentifierCacheKey("model_b"))
+}
+
 func TestLocalCacheFactorySuite(t *testing.T) {
 	suite.Run(t, new(LocalCacheFactoryTestSuite))
 }

@@ -108,6 +108,7 @@ func (t *ModelResultHandler) Load(sspIdentifier string) error {
 
 func (t *ModelResultHandler) loadSingleModel(sspIdentifier string, modelIdentifier string, modelResultValue float32, putItemCounter *int, putItemTotalSize *int64) error {
 	modelResultFileName := t.BuildModelResultFileName(sspIdentifier, modelIdentifier)
+	fileIdentifierCacheKey := repository.ModelResultFileIdentifierCacheKey(modelIdentifier)
 
 	var modelResult []byte
 	var repositoryError error
@@ -126,7 +127,7 @@ func (t *ModelResultHandler) loadSingleModel(sspIdentifier string, modelIdentifi
 			_ = getObjectOutput.Body.Close()
 		}()
 
-		if !t.localCacheFactory.ShouldRefresh(repository.CacheKeyModelResultFileIdentifier, *(getObjectOutput.ETag)) {
+		if !t.localCacheFactory.ShouldRefresh(fileIdentifierCacheKey, *(getObjectOutput.ETag)) {
 			Logger.Info().Msgf("Skipping refresh for %s", modelResultFileName)
 			return nil
 		}
@@ -145,7 +146,7 @@ func (t *ModelResultHandler) loadSingleModel(sspIdentifier string, modelIdentifi
 			_ = filePointer.Close()
 		}()
 
-		if !t.localCacheFactory.ShouldRefreshLocal(repository.CacheKeyModelResultFileIdentifier, filePointer) {
+		if !t.localCacheFactory.ShouldRefreshLocal(fileIdentifierCacheKey, filePointer) {
 			Logger.Info().Msgf("Skipping refresh for %s", filePath)
 			return nil
 		}
