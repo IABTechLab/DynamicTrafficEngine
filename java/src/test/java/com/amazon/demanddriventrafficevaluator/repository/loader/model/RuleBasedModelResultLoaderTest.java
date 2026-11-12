@@ -21,11 +21,13 @@ import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -36,6 +38,7 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyDouble;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
@@ -89,6 +92,7 @@ class RuleBasedModelResultLoaderTest {
             assertTrue(spyModelResultsCacheDao.get("testModel", modelResult1).isPresent());
             assertTrue(spyModelResultsCacheDao.get("testModel", modelResult2).isPresent());
             verify(mockFileIdentifierCacheDao).put("model-results-identifier", "testModel", "eTag");
+            verify(mockFileIdentifierCacheDao, never()).put(anyString(), anyString(), eq(""));
         }
     }
 
@@ -293,6 +297,49 @@ class RuleBasedModelResultLoaderTest {
 
         // Act & Assert
         assertThrows(IllegalStateException.class, () -> loader.load(input));
+        verify(mockFileIdentifierCacheDao).put("model-results-identifier", "testModel", "");
+    }
+
+    @Test
+    void testLoad_ReadFailure_ResetsETagAndNextLoadRetries() {
+        // Arrange
+        ModelResultLoaderInput input = new ModelResultLoaderInput("testBucket", "testKey", "testVendor", "testModel", ModelValueType.LowValue);
+        AtomicBoolean failRead = new AtomicBoolean(true);
+        RuleBasedModelResultLoader failingLoader =
+                new RuleBasedModelResultLoader(mockFileIdentifierCacheDao, spyModelResultsCacheDao, mockFileDao) {
+                    @Override
+                    protected BufferedReader getBufferedReader(InputStream inputStream) {
+                        if (failRead.get()) {
+                            return new BufferedReader(new StringReader("")) {
+                                @Override
+                                public String readLine() throws IOException {
+                                    throw new IOException("read failed");
+                                }
+                            };
+                        }
+                        return super.getBufferedReader(inputStream);
+                    }
+                };
+
+        String modelResult = "result1";
+        InputStream firstStream = new ResponseInputStream<>(GetObjectResponse.builder().eTag("eTag").build(),
+                new ByteArrayInputStream(modelResult.getBytes(StandardCharsets.UTF_8)));
+        InputStream secondStream = new ResponseInputStream<>(GetObjectResponse.builder().eTag("eTag").build(),
+                new ByteArrayInputStream(modelResult.getBytes(StandardCharsets.UTF_8)));
+        when(mockFileDao.get(anyString(), anyString()))
+                .thenReturn(Optional.of(firstStream), Optional.of(secondStream));
+        // The second load sees the reset value, not "eTag"
+        when(mockFileIdentifierCacheDao.get(anyString(), anyString()))
+                .thenReturn(Optional.empty(), Optional.of(""));
+
+        // Act & Assert: the read fails, returns false, and resets the ETag
+        assertFalse(failingLoader.load(input));
+        verify(mockFileIdentifierCacheDao).put("model-results-identifier", "testModel", "");
+
+        // Act & Assert: the next load with the same ETag reloads
+        failRead.set(false);
+        assertTrue(failingLoader.load(input));
+        verify(spyModelResultsCacheDao).put("testModel", modelResult, 0.0);
     }
 
     @Test

@@ -84,4 +84,20 @@ public abstract class DefaultLoader<T extends LoaderInput> implements Loader<T> 
             return false;
         }
     }
+
+    /** Replaces a stored file identifier after a failed load. Real ETags are never empty. */
+    private static final String FILE_IDENTIFIER_RESET_VALUE = "";
+
+    /**
+     * Makes the next {@link #shouldRefresh} for this key report a change. shouldRefresh saves the
+     * new ETag before the caller loads the file; a caller whose load then fails must call this,
+     * or the file is skipped until it changes again.
+     */
+    protected void resetFileIdentifier(String fileIdentifierCacheKey) {
+        try {
+            fileIdentifierCacheDao.put(CACHE_IDENTIFIER_FILE_IDENTIFIER, fileIdentifierCacheKey, FILE_IDENTIFIER_RESET_VALUE);
+        } catch (Exception e) {
+            log.warn("Failed to reset file identifier [{}]; the file will not be retried until it changes", fileIdentifierCacheKey, e);
+        }
+    }
 }

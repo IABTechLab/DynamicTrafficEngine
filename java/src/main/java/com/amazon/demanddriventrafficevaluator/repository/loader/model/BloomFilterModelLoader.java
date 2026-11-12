@@ -71,6 +71,8 @@ public class BloomFilterModelLoader extends DefaultLoader<ModelResultLoaderInput
     public boolean load(ModelResultLoaderInput input) {
         String modelIdentifier = input.getModelIdentifier();
         String fileKey = getS3ObjectKey(input);
+        boolean refreshed = false;
+        boolean loaded = false;
 
         try (InputStream inputStream = fileDao.get(input.getS3Bucket(), fileKey)
                 .orElseThrow(() -> ResourceNotFoundException.builder()
@@ -79,17 +81,23 @@ public class BloomFilterModelLoader extends DefaultLoader<ModelResultLoaderInput
                 log.debug("BloomFilterModelLoader is not refreshed for model {}", modelIdentifier);
                 return false;
             }
+            refreshed = true;
 
             @SuppressWarnings("UnstableApiUsage")
             BloomFilter<String> bloomFilter = BloomFilter.readFrom(
                     inputStream, Funnels.stringFunnel(StandardCharsets.UTF_8));
             bloomFilterDao.put(modelIdentifier, modelIdentifier, bloomFilter);
+            loaded = true;
         } catch (ResourceNotFoundException e) {
             log.warn("Bloom filter model file not found for model {}: {}", modelIdentifier, fileKey);
             return false;
         } catch (Exception e) {
             log.error("Failed to deserialize bloom filter model for model {}: {}", modelIdentifier, fileKey, e);
             return false;
+        } finally {
+            if (refreshed && !loaded) {
+                resetFileIdentifier(modelIdentifier);
+            }
         }
         log.info("Loaded bloom filter model for model {}", modelIdentifier);
         return true;

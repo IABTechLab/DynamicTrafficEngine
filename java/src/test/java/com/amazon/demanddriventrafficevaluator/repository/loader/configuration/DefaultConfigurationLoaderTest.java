@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.core.ResponseInputStream;
@@ -29,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -82,6 +84,7 @@ class DefaultConfigurationLoaderTest {
         assertTrue(result);
         verify(mockConfigurationCacheDao).put(CACHE_IDENTIFIER_CONFIGURATION, CONFIG_CACHE_KEY, mockModelConfiguration);
         verify(mockFileIdentifierCacheDao).put("model-results-identifier", "testConfigKey", "eTag");
+        verify(mockFileIdentifierCacheDao, never()).put(anyString(), anyString(), eq(""));
     }
 
     @Test
@@ -102,6 +105,7 @@ class DefaultConfigurationLoaderTest {
         assertTrue(result);
         verify(mockConfigurationCacheDao).put(CACHE_IDENTIFIER_CONFIGURATION, CONFIG_CACHE_KEY, mockModelConfiguration);
         verify(mockFileIdentifierCacheDao).put("model-results-identifier", "testConfigKey", "eTag");
+        verify(mockFileIdentifierCacheDao, never()).put(anyString(), anyString(), eq(""));
     }
 
     @Test
@@ -117,21 +121,30 @@ class DefaultConfigurationLoaderTest {
     }
 
     @Test
-    void testLoad_DeserializationError() throws IOException {
+    void testLoad_DeserializationError_ResetsETagAndRetries() throws IOException {
         // Arrange
         ConfigurationLoaderInput input = new ConfigurationLoaderInput("testBucket", "testKey", "testVendor", "testType");
         String s3ObjectKey = "testVendor/configuration/testType/config.json";
 
         when(mockFileDao.get("testBucket", s3ObjectKey)).thenReturn(Optional.of(mockResponseInputStream));
-        when(mockMapper.readValue(mockResponseInputStream, ModelConfiguration.class)).thenThrow(new IOException("Deserialization error"));
+        when(mockMapper.readValue(mockResponseInputStream, ModelConfiguration.class))
+                .thenThrow(new IOException("Deserialization error"))
+                .thenReturn(mockModelConfiguration);
         when(mockResponseInputStream.response()).thenReturn(GetObjectResponse.builder().eTag("eTag").build());
-        when(mockFileIdentifierCacheDao.get(anyString(), anyString())).thenReturn(Optional.empty());
+        // The second load sees the reset value, not "eTag"
+        when(mockFileIdentifierCacheDao.get(anyString(), anyString()))
+                .thenReturn(Optional.empty(), Optional.of(""));
 
-        // Act & Assert
-        boolean result = loader.load(input);
-        assertFalse(result);
+        // Act & Assert: the first load fails and resets the ETag after saving it
+        assertFalse(loader.load(input));
         verify(mockConfigurationCacheDao, times(0)).put(CACHE_IDENTIFIER_CONFIGURATION, CONFIG_CACHE_KEY, mockModelConfiguration);
-        verify(mockFileIdentifierCacheDao).put("model-results-identifier", "testConfigKey", "eTag");
+        InOrder inOrder = inOrder(mockFileIdentifierCacheDao);
+        inOrder.verify(mockFileIdentifierCacheDao).put("model-results-identifier", "testConfigKey", "eTag");
+        inOrder.verify(mockFileIdentifierCacheDao).put("model-results-identifier", "testConfigKey", "");
+
+        // Act & Assert: the next load retries the same file and succeeds
+        assertTrue(loader.load(input));
+        verify(mockConfigurationCacheDao).put(CACHE_IDENTIFIER_CONFIGURATION, CONFIG_CACHE_KEY, mockModelConfiguration);
     }
 
     @Test

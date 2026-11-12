@@ -74,6 +74,8 @@ public class RuleBasedModelResultLoader extends DefaultLoader<ModelResultLoaderI
     public boolean load(ModelResultLoaderInput input) {
         putItemCounter = 0L;
         putItemTotalSize = 0L;
+        boolean refreshed = false;
+        boolean loaded = false;
         String modelIdentifier = input.getModelIdentifier();
         String fileKey = getS3ObjectKey(input);
 
@@ -85,6 +87,7 @@ public class RuleBasedModelResultLoader extends DefaultLoader<ModelResultLoaderI
                 log.debug("RuleBasedModelResultLoader is not refreshed");
                 return false;
             }
+            refreshed = true;
 
             // invalidate cache since new model is detected
             modelResultsCacheDao.clear(modelIdentifier);
@@ -95,6 +98,7 @@ public class RuleBasedModelResultLoader extends DefaultLoader<ModelResultLoaderI
                 putItemCounter++;
                 putItemTotalSize += modelResult.length();
             }
+            loaded = true;
         } catch (ResourceNotFoundException e) {
             log.warn(e);
             return false;
@@ -103,6 +107,10 @@ public class RuleBasedModelResultLoader extends DefaultLoader<ModelResultLoaderI
             return false;
         } catch (Exception e) {
             throw new IllegalStateException("Fail to load model result file due to unknown issue: " + fileKey, e);
+        } finally {
+            if (refreshed && !loaded) {
+                resetFileIdentifier(modelIdentifier);
+            }
         }
         log.info("Loaded {} model results, total size: {}", putItemCounter, putItemTotalSize);
         return true;

@@ -188,6 +188,7 @@ class BloomFilterModelLoaderTest {
             assertTrue(result);
             verify(mockBloomFilterDao).put(eq("testModel"), eq("testModel"), org.mockito.ArgumentMatchers.any());
             verify(mockFileIdentifierCacheDao).put("model-results-identifier", "testModel", "newETag");
+            verify(mockFileIdentifierCacheDao, never()).put(anyString(), anyString(), eq(""));
         }
 
         @Test
@@ -252,6 +253,42 @@ class BloomFilterModelLoaderTest {
             // Assert
             assertFalse(result);
             verify(mockBloomFilterDao, never()).put(anyString(), anyString(), org.mockito.ArgumentMatchers.any());
+            verify(mockFileIdentifierCacheDao).put("model-results-identifier", "testModel", "");
+        }
+
+        @Test
+        void testLoad_DeserializationFailure_NextLoadRetries() throws Exception {
+            // Arrange
+            ModelResultLoaderInput input = new ModelResultLoaderInput(
+                    "testBucket", "testKey", "testVendor", "testModel",
+                    ModelValueType.LowValue, S3PathMode.STATIC);
+
+            InputStream badStream = new ResponseInputStream<>(
+                    GetObjectResponse.builder().eTag("newETag").build(),
+                    new ByteArrayInputStream("corrupted".getBytes(StandardCharsets.UTF_8)));
+
+            @SuppressWarnings("UnstableApiUsage")
+            BloomFilter<String> filter = BloomFilter.create(
+                    Funnels.stringFunnel(StandardCharsets.UTF_8), 100, 0.01);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            filter.writeTo(baos);
+            InputStream goodStream = new ResponseInputStream<>(
+                    GetObjectResponse.builder().eTag("newETag").build(),
+                    new ByteArrayInputStream(baos.toByteArray()));
+
+            when(mockFileDao.get(anyString(), anyString()))
+                    .thenReturn(Optional.of(badStream), Optional.of(goodStream));
+            // The second load sees the reset value, not "newETag"
+            when(mockFileIdentifierCacheDao.get(anyString(), anyString()))
+                    .thenReturn(Optional.empty(), Optional.of(""));
+
+            // Act & Assert: the first load fails and resets the ETag
+            assertFalse(loader.load(input));
+            verify(mockFileIdentifierCacheDao).put("model-results-identifier", "testModel", "");
+
+            // Act & Assert: the next load retries the same ETag and succeeds
+            assertTrue(loader.load(input));
+            verify(mockBloomFilterDao).put(eq("testModel"), eq("testModel"), org.mockito.ArgumentMatchers.any());
         }
 
         @Test
