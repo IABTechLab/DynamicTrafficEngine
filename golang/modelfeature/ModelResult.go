@@ -133,6 +133,7 @@ func (t *ModelResultHandler) loadSingleModel(sspIdentifier string, modelIdentifi
 		}
 
 		modelResult, repositoryError = t.daoFactory.ReadContent(getObjectOutput.Body)
+
 	} else {
 		// read from local file path
 		filePath := filepath.Join(t.folderPrefix, modelResultFileName)
@@ -153,6 +154,15 @@ func (t *ModelResultHandler) loadSingleModel(sspIdentifier string, modelIdentifi
 
 		modelResult, repositoryError = t.daoFactory.GetDataFromLocal(filePointer)
 	}
+
+	// ShouldRefresh* has already saved the new file identifier. Reset it unless the load
+	// succeeds, so the next Load retries this file instead of skipping it.
+	loaded := false
+	defer func() {
+		if !loaded {
+			repository.ResetFileIdentifier(t.localCacheFactory, fileIdentifierCacheKey)
+		}
+	}()
 
 	if repositoryError != nil {
 		return fmt.Errorf("error getting data %w", repositoryError)
@@ -181,6 +191,8 @@ func (t *ModelResultHandler) loadSingleModel(sspIdentifier string, modelIdentifi
 		*putItemCounter++
 		*putItemTotalSize += int64(len(record[0])) // Only count the size of the Key, not the entire modelResultKeys
 	}
+	// Bad rows and failed puts are logged and skipped above; they still count as successful load.
+	loaded = true
 	return nil
 }
 

@@ -437,3 +437,22 @@ func (suite *LocalCacheFactoryTestSuite) TestModelResultFileIdentifierCacheKey()
 func TestLocalCacheFactorySuite(t *testing.T) {
 	suite.Run(t, new(LocalCacheFactoryTestSuite))
 }
+
+// ResetFileIdentifier makes the next ShouldRefresh report a change even when the identifier is unchanged.
+func (suite *LocalCacheFactoryTestSuite) TestResetFileIdentifier_NextShouldRefreshReportsChange() {
+	cache, _ := ristretto.NewCache[string, any](&ristretto.Config[string, any]{
+		NumCounters: 5000,
+		MaxCost:     100 << 20,
+		BufferItems: 32,
+	})
+	suite.mockRegistry.On("Get", CacheNameFileIdentifier).Return(cache, true)
+	key := ModelResultFileIdentifierCacheKey("model_a")
+
+	assert.True(suite.T(), suite.factory.ShouldRefresh(key, "etag"), "first sight")
+	assert.False(suite.T(), suite.factory.ShouldRefresh(key, "etag"), "unchanged")
+
+	ResetFileIdentifier(suite.factory, key)
+
+	assert.True(suite.T(), suite.factory.ShouldRefresh(key, "etag"), "unchanged identifier after reset")
+	suite.mockRegistry.AssertExpectations(suite.T())
+}

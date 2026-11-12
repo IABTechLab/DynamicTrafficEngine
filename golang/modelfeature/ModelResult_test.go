@@ -147,6 +147,7 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_S3_ReturnError_ReadContentErr
 	suite.daoFactory.EXPECT().GetS3Object(mock.Anything, mock.Anything, mock.Anything).Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).Once()
 	suite.daoFactory.EXPECT().ReadContent(mock.Anything).Return(nil, fmt.Errorf("ReadContent Error")).Once()
 
+	suite.localCacheFactory.EXPECT().PutToLocalCacheWithTTL(repository.CacheNameFileIdentifier, repository.ModelResultFileIdentifierCacheKey("adsp_low-value_v2"), "", int64(0)).Return(true).Once()
 	err := suite.modelResultHandler.Load("ssp")
 
 	suite.EqualError(err, "error getting data ReadContent Error")
@@ -232,6 +233,7 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_ReturnError_GetDataFromLocalE
 	suite.localCacheFactory.EXPECT().ShouldRefreshLocal(repository.ModelResultFileIdentifierCacheKey("adsp_low-value_v2"), mock.Anything).Return(true).Once()
 	suite.daoFactory.EXPECT().GetDataFromLocal(mock.Anything).Return(nil, fmt.Errorf("GetDataFromLocalError")).Once()
 
+	suite.localCacheFactory.EXPECT().PutToLocalCacheWithTTL(repository.CacheNameFileIdentifier, repository.ModelResultFileIdentifierCacheKey("adsp_low-value_v2"), "", int64(0)).Return(true).Once()
 	err := suite.modelResultHandler.Load("ssp")
 
 	suite.EqualError(err, "error getting data GetDataFromLocalError")
@@ -824,4 +826,22 @@ func (suite *ModelResultHandlerTestSuite) TestLoad_S3_MultipleModels_UnchangedFi
 
 	suite.NoError(handler.Load("ssp"), "first load")
 	suite.NoError(handler.Load("ssp"), "second load")
+}
+
+// Regression test for issue #29: a failed read must not leave the new ETag saved, or the
+// next Load skips the model until its file changes again.
+func (suite *ModelResultHandlerTestSuite) TestLoad_S3_RetriesAfterReadContentError() {
+	localCacheFactory := repository.NewLocalCacheFactory()
+	handler := NewModelResultHandler("ssp", suite.s3FolderPrefix, suite.daoFactory, suite.modelConfigurationHandler, localCacheFactory, suite.timeProvider)
+
+	suite.modelConfigurationHandler.EXPECT().Provide().Return(&suite.modelConfiguration, nil).Times(2)
+	suite.daoFactory.EXPECT().
+		GetS3Object(mock.Anything, mock.Anything, mock.Anything).
+		Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).
+		Times(2) // same ETag both times
+	suite.daoFactory.EXPECT().ReadContent(mock.Anything).Return(nil, fmt.Errorf("ReadContent Error")).Once()
+	suite.daoFactory.EXPECT().ReadContent(mock.Anything).Return(suite.modelResultData, nil).Once()
+
+	suite.EqualError(handler.Load("ssp"), "error getting data ReadContent Error", "first load")
+	suite.NoError(handler.Load("ssp"), "second load must retry the unchanged file")
 }

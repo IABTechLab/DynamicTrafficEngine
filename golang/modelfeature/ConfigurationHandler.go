@@ -87,6 +87,15 @@ func (t *ConfigurationHandler[T]) Load() (bool, error) {
 		jsonData, err = t.daoFactory.GetDataFromLocal(filePointer)
 	}
 
+	// ShouldRefresh* has already saved the new file identifier. Reset it unless the load
+	// succeeds, so the next Load retries this file instead of skipping it.
+	loaded := false
+	defer func() {
+		if !loaded {
+			repository.ResetFileIdentifier(t.localCacheFactory, t.fileIdentifierCacheKey)
+		}
+	}()
+
 	if err != nil {
 		return false, fmt.Errorf("error getting data: %v", err)
 	}
@@ -104,6 +113,7 @@ func (t *ConfigurationHandler[T]) Load() (bool, error) {
 	if !isSuccess {
 		return false, fmt.Errorf("error setting data to local cache [Configuration] with identifier [%v] and Value [%v]", t.dataCacheKey, config)
 	}
+	loaded = true
 	return true, nil
 }
 

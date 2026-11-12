@@ -104,6 +104,15 @@ func (l *BloomFilterLoader) loadSingleModel(sspIdentifier string, folderPrefix s
 		return nil
 	}
 
+	// ShouldRefresh has already saved the new ETag. Reset it unless the load succeeds,
+	// so the next Load retries this file instead of skipping it.
+	loaded := false
+	defer func() {
+		if !loaded {
+			repository.ResetFileIdentifier(l.localCacheFactory, cacheKey)
+		}
+	}()
+
 	content, err := l.daoFactory.ReadContent(getObjectOutput.Body)
 	if err != nil {
 		return fmt.Errorf("error reading bloom filter content for %s: %w", modelIdentifier, err)
@@ -115,6 +124,7 @@ func (l *BloomFilterLoader) loadSingleModel(sspIdentifier string, folderPrefix s
 	}
 
 	l.store.Put(modelIdentifier, filter)
+	loaded = true
 	loaderLogger.Info().Msgf("Successfully loaded bloom filter for model [%s]", modelIdentifier)
 
 	return nil

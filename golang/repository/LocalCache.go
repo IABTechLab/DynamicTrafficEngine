@@ -195,3 +195,17 @@ func (t *LocalCacheFactory) putFileIdentifier(fileIdentifierCacheKey string, fil
 		t.PutToLocalCacheWithTTL(CacheNameFileIdentifier, fileIdentifierCacheKey, fileIdentifier, 0)
 	}
 }
+
+// fileIdentifierResetValue replaces a stored file identifier after a failed load. Real ETags and
+// mod-time strings are never empty, so the next ShouldRefresh always sees a change and retries.
+const fileIdentifierResetValue = ""
+
+// ResetFileIdentifier makes the next ShouldRefresh / ShouldRefreshLocal for fileIdentifierCacheKey
+// report a change. ShouldRefresh saves the new identifier as soon as it sees one, before the caller
+// loads the file; a caller whose load then fails must call this, or the file is skipped until it
+// changes again.
+func ResetFileIdentifier(localCacheFactory interfaces.LocalCacheFactoryInterface, fileIdentifierCacheKey string) {
+	if !localCacheFactory.PutToLocalCacheWithTTL(CacheNameFileIdentifier, fileIdentifierCacheKey, fileIdentifierResetValue, 0) {
+		Logger.Warn().Msgf("Failed to reset file identifier [%s]; the file will not be retried until it changes", fileIdentifierCacheKey)
+	}
+}
