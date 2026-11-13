@@ -3,6 +3,7 @@
 
 package com.amazon.demanddriventrafficevaluator.repository.loader.model;
 
+import com.amazon.demanddriventrafficevaluator.repository.dao.ConditionalGetResult;
 import com.amazon.demanddriventrafficevaluator.repository.dao.Dao;
 import com.amazon.demanddriventrafficevaluator.repository.entity.S3PathMode;
 import com.amazon.demanddriventrafficevaluator.repository.loader.DefaultLoader;
@@ -72,18 +73,26 @@ public class BloomFilterModelLoader extends DefaultLoader<ModelResultLoaderInput
         String modelIdentifier = input.getModelIdentifier();
         String fileKey = getS3ObjectKey(input);
 
-        try (InputStream inputStream = fileDao.get(input.getS3Bucket(), fileKey)
-                .orElseThrow(() -> ResourceNotFoundException.builder()
-                        .message("Bloom filter model file not found: " + fileKey).build())) {
-            if (!shouldRefresh(modelIdentifier, inputStream)) {
+        try {
+            ConditionalGetResult<InputStream> file =
+                    getFileIfChanged(fileDao, input.getS3Bucket(), fileKey, modelIdentifier);
+            if (file.isNotModified()) {
                 log.debug("BloomFilterModelLoader is not refreshed for model {}", modelIdentifier);
                 return false;
             }
+            try (InputStream inputStream = file.getValue()
+                    .orElseThrow(() -> ResourceNotFoundException.builder()
+                            .message("Bloom filter model file not found: " + fileKey).build())) {
+                if (!shouldRefresh(modelIdentifier, inputStream)) {
+                    log.debug("BloomFilterModelLoader is not refreshed for model {}", modelIdentifier);
+                    return false;
+                }
 
-            @SuppressWarnings("UnstableApiUsage")
-            BloomFilter<String> bloomFilter = BloomFilter.readFrom(
-                    inputStream, Funnels.stringFunnel(StandardCharsets.UTF_8));
-            bloomFilterDao.put(modelIdentifier, modelIdentifier, bloomFilter);
+                @SuppressWarnings("UnstableApiUsage")
+                BloomFilter<String> bloomFilter = BloomFilter.readFrom(
+                        inputStream, Funnels.stringFunnel(StandardCharsets.UTF_8));
+                bloomFilterDao.put(modelIdentifier, modelIdentifier, bloomFilter);
+            }
         } catch (ResourceNotFoundException e) {
             log.warn("Bloom filter model file not found for model {}: {}", modelIdentifier, fileKey);
             return false;

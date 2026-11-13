@@ -34,6 +34,23 @@ public interface Dao<T, R> {
     Optional<R> get(String identifier, T key);
 
     /**
+     * Retrieves a value unless its stored version matches the version the caller already has.
+     * <p>
+     * Implementations that can check the version without reading the value (for example from
+     * object metadata) override this to skip the read. The default ignores {@code knownVersion}
+     * and delegates to {@link #get}, so it never returns {@link ConditionalGetResult#notModified}.
+     * </p>
+     *
+     * @param identifier   A string identifying the specific storage system to query.
+     * @param key          The key to look up in the storage system.
+     * @param knownVersion The version the caller already has (such as an S3 ETag), or null if none.
+     * @return The value, not found, or not modified.
+     */
+    default ConditionalGetResult<R> getIfChanged(String identifier, T key, String knownVersion) {
+        return ConditionalGetResult.fromOptional(get(identifier, key));
+    }
+
+    /**
      * Stores a value in the storage system.
      * <p>
      * This method attempts to put the given value into the storage system identified

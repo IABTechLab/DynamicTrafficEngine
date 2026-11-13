@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	mockInterfaces "golang.a2z.com/demanddriventrafficevaluator/mocks/interfaces"
 )
 
 type DaoFactoryTestSuite struct {
@@ -119,6 +122,117 @@ func (suite *DaoFactoryTestSuite) TestGetS3Object_Error() {
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), expectedOutput, result)
 	mockS3Client.AssertExpectations(suite.T())
+}
+
+func (suite *DaoFactoryTestSuite) TestGetS3ObjectIfChanged_SendsIfNoneMatchWithKnownETag() {
+	mockS3Client := new(MockS3Client)
+	factory := &DaoFactory{s3Client: mockS3Client}
+
+	expectedOutput := &s3.GetObjectOutput{}
+	mockS3Client.On("GetObject", mock.Anything, mock.MatchedBy(func(input *s3.GetObjectInput) bool {
+		return input.IfNoneMatch != nil && *input.IfNoneMatch == `"etag-1"`
+	})).Return(expectedOutput, nil)
+
+	result, notModified, err := factory.GetS3ObjectIfChanged(context.Background(), "test-bucket", "test-key", `"etag-1"`)
+
+	assert.NoError(suite.T(), err)
+	assert.False(suite.T(), notModified)
+	assert.Equal(suite.T(), expectedOutput, result)
+	mockS3Client.AssertExpectations(suite.T())
+}
+
+func (suite *DaoFactoryTestSuite) TestGetS3ObjectIfChanged_OmitsIfNoneMatchWithoutKnownETag() {
+	mockS3Client := new(MockS3Client)
+	factory := &DaoFactory{s3Client: mockS3Client}
+
+	expectedOutput := &s3.GetObjectOutput{}
+	mockS3Client.On("GetObject", mock.Anything, mock.MatchedBy(func(input *s3.GetObjectInput) bool {
+		return input.IfNoneMatch == nil
+	})).Return(expectedOutput, nil)
+
+	result, notModified, err := factory.GetS3ObjectIfChanged(context.Background(), "test-bucket", "test-key", "")
+
+	assert.NoError(suite.T(), err)
+	assert.False(suite.T(), notModified)
+	assert.Equal(suite.T(), expectedOutput, result)
+	mockS3Client.AssertExpectations(suite.T())
+}
+
+func (suite *DaoFactoryTestSuite) TestGetS3ObjectIfChanged_ReturnsOtherErrors() {
+	mockS3Client := new(MockS3Client)
+	factory := &DaoFactory{s3Client: mockS3Client}
+
+	mockS3Client.On("GetObject", mock.Anything, mock.Anything).Return(nil, errors.New("S3 error"))
+
+	result, notModified, err := factory.GetS3ObjectIfChanged(context.Background(), "test-bucket", "test-key", `"etag-1"`)
+
+	assert.Error(suite.T(), err)
+	assert.False(suite.T(), notModified)
+	assert.Nil(suite.T(), result)
+}
+
+// Runs the real S3 client against a local server, to check how the SDK reports a 304 response.
+func (suite *DaoFactoryTestSuite) TestGetS3ObjectIfChanged_ReportsNotModifiedFromS3() {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("If-None-Match") == `"etag-1"` {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Set("ETag", `"etag-1"`)
+		_, _ = w.Write([]byte("content"))
+	}))
+	defer server.Close()
+	factory := &DaoFactory{s3Client: s3.New(s3.Options{
+		Region:       "us-east-1",
+		BaseEndpoint: aws.String(server.URL),
+		UsePathStyle: true,
+		Credentials:  mockCredentialsProvider{},
+	})}
+
+	result, notModified, err := factory.GetS3ObjectIfChanged(context.Background(), "test-bucket", "test-key", `"etag-1"`)
+	assert.NoError(suite.T(), err)
+	assert.True(suite.T(), notModified)
+	assert.Nil(suite.T(), result)
+
+	result, notModified, err = factory.GetS3ObjectIfChanged(context.Background(), "test-bucket", "test-key", `"etag-0"`)
+	assert.NoError(suite.T(), err)
+	assert.False(suite.T(), notModified)
+	content, err := factory.ReadContent(result.Body)
+	assert.NoError(suite.T(), err)
+	assert.Equal(suite.T(), "content", string(content))
+	assert.Equal(suite.T(), `"etag-1"`, *result.ETag)
+}
+
+type conditionalDaoFactory struct {
+	*mockInterfaces.DaoFactoryInterface
+	*mockInterfaces.ConditionalS3ObjectFetcher
+}
+
+func (suite *DaoFactoryTestSuite) TestFetchS3ObjectIfChanged_UsesConditionalFetcher() {
+	daoFactory := mockInterfaces.NewDaoFactoryInterface(suite.T())
+	conditionalFetcher := mockInterfaces.NewConditionalS3ObjectFetcher(suite.T())
+	conditionalFetcher.EXPECT().
+		GetS3ObjectIfChanged(mock.Anything, "test-bucket", "test-key", `"etag-1"`).
+		Return(nil, true, nil).Once()
+
+	// No GetS3Object expectation: the mock fails the test if it is called.
+	result, notModified, err := FetchS3ObjectIfChanged(context.Background(), conditionalDaoFactory{daoFactory, conditionalFetcher}, "test-bucket", "test-key", `"etag-1"`)
+
+	assert.NoError(suite.T(), err)
+	assert.True(suite.T(), notModified)
+	assert.Nil(suite.T(), result)
+}
+
+func (suite *DaoFactoryTestSuite) TestFetchS3ObjectIfChanged_FallsBackToGetS3Object() {
+	daoFactory := mockInterfaces.NewDaoFactoryInterface(suite.T())
+	expectedOutput := &s3.GetObjectOutput{}
+	daoFactory.EXPECT().GetS3Object(mock.Anything, "test-bucket", "test-key").Return(expectedOutput, nil).Once()
+
+	result, notModified, err := FetchS3ObjectIfChanged(context.Background(), daoFactory, "test-bucket", "test-key", `"etag-1"`)
+
+	assert.NoError(suite.T(), err)
+	assert.False(suite.T(), notModified)
+	assert.Equal(suite.T(), expectedOutput, result)
 }
 
 func TestDaoFactorySuite(t *testing.T) {

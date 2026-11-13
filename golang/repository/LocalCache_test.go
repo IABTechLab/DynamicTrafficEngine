@@ -401,6 +401,23 @@ func (suite *LocalCacheFactoryTestSuite) TestShouldRefresh() {
 	suite.mockRegistry.AssertExpectations(suite.T())
 }
 
+func (suite *LocalCacheFactoryTestSuite) TestCachedFileIdentifier() {
+	cache, _ := ristretto.NewCache[string, any](&ristretto.Config[string, any]{
+		NumCounters: 5000,
+		MaxCost:     100 << 20,
+		BufferItems: 32,
+	})
+	suite.mockRegistry.On("Get", CacheNameFileIdentifier).Return(cache, true)
+
+	assert.Equal(suite.T(), "", CachedFileIdentifier(suite.factory, "missing-key"))
+
+	assert.True(suite.T(), suite.factory.ShouldRefresh("config-key", `"etag-1"`))
+	assert.Equal(suite.T(), `"etag-1"`, CachedFileIdentifier(suite.factory, "config-key"))
+
+	assert.True(suite.T(), suite.factory.PutToLocalCacheWithTTL(CacheNameFileIdentifier, "non-string-key", 42, 0))
+	assert.Equal(suite.T(), "", CachedFileIdentifier(suite.factory, "non-string-key"))
+}
+
 func TestLocalCacheFactorySuite(t *testing.T) {
 	suite.Run(t, new(LocalCacheFactoryTestSuite))
 }

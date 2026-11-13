@@ -21,6 +21,7 @@ packages:
       ModelResultHandlerInterface:
       LocalCacheRegistryInterface:
       DaoFactoryInterface:
+      ConditionalS3ObjectFetcher:
       LocalCacheFactoryInterface:
       ConfigurationHandlerInterface:
       ExperimentConfigurationHandlerInterface:

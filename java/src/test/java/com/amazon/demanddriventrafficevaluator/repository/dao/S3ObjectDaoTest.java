@@ -121,6 +121,66 @@ class S3ObjectDaoTest {
     }
 
     @Test
+    void testGetIfChanged_SameETag_ReturnsNotModifiedWithoutGet() {
+        when(mockS3Client.headObject(any(HeadObjectRequest.class)))
+                .thenReturn(HeadObjectResponse.builder().contentLength(1024L).eTag("\"etag-1\"").build());
+
+        ConditionalGetResult<InputStream> result = s3ObjectDao.getIfChanged("testBucket", "testKey", "\"etag-1\"");
+
+        assertTrue(result.isNotModified());
+        assertFalse(result.getValue().isPresent());
+        verify(mockS3Client, org.mockito.Mockito.never()).getObject(any(GetObjectRequest.class));
+    }
+
+    @Test
+    void testGetIfChanged_DifferentETag_ReturnsObject() {
+        when(mockS3Client.headObject(any(HeadObjectRequest.class)))
+                .thenReturn(HeadObjectResponse.builder().contentLength(1024L).eTag("\"etag-2\"").build());
+        when(mockS3Client.getObject(any(GetObjectRequest.class))).thenReturn(mockResponseResponseInputStream);
+
+        ConditionalGetResult<InputStream> result = s3ObjectDao.getIfChanged("testBucket", "testKey", "\"etag-1\"");
+
+        assertFalse(result.isNotModified());
+        assertEquals(mockResponseResponseInputStream, result.getValue().orElseThrow());
+        verify(mockS3Client).getObject(any(GetObjectRequest.class));
+    }
+
+    @Test
+    void testGetIfChanged_NoKnownETag_ReturnsObject() {
+        when(mockS3Client.headObject(any(HeadObjectRequest.class)))
+                .thenReturn(HeadObjectResponse.builder().contentLength(1024L).eTag("\"etag-1\"").build());
+        when(mockS3Client.getObject(any(GetObjectRequest.class))).thenReturn(mockResponseResponseInputStream);
+
+        ConditionalGetResult<InputStream> result = s3ObjectDao.getIfChanged("testBucket", "testKey", null);
+
+        assertFalse(result.isNotModified());
+        assertEquals(mockResponseResponseInputStream, result.getValue().orElseThrow());
+    }
+
+    @Test
+    void testGetIfChanged_ExceedsMaxSize_ReturnsNotFoundEvenIfETagMatches() {
+        when(mockS3Client.headObject(any(HeadObjectRequest.class)))
+                .thenReturn(HeadObjectResponse.builder().contentLength(31L * 1024 * 1024).eTag("\"etag-1\"").build());
+
+        ConditionalGetResult<InputStream> result = s3ObjectDao.getIfChanged("testBucket", "testKey", "\"etag-1\"");
+
+        assertFalse(result.isNotModified());
+        assertFalse(result.getValue().isPresent());
+        verify(mockS3Client, org.mockito.Mockito.never()).getObject(any(GetObjectRequest.class));
+    }
+
+    @Test
+    void testGetIfChanged_WhenS3ExceptionThrown_ReturnsNotFound() {
+        when(mockS3Client.headObject(any(HeadObjectRequest.class)))
+                .thenThrow(S3Exception.builder().message("S3 Error").build());
+
+        ConditionalGetResult<InputStream> result = s3ObjectDao.getIfChanged("testBucket", "testKey", "\"etag-1\"");
+
+        assertFalse(result.isNotModified());
+        assertFalse(result.getValue().isPresent());
+    }
+
+    @Test
     void testPut_ThrowsUnsupportedOperationException() {
         // Arrange
         String bucketName = "testBucket";
