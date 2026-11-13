@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	mockInterfaces "golang.a2z.com/demanddriventrafficevaluator/mocks/interfaces"
 )
 
 type DaoFactoryTestSuite struct {
@@ -200,6 +201,38 @@ func (suite *DaoFactoryTestSuite) TestGetS3ObjectIfChanged_ReportsNotModifiedFro
 	assert.NoError(suite.T(), err)
 	assert.Equal(suite.T(), "content", string(content))
 	assert.Equal(suite.T(), `"etag-1"`, *result.ETag)
+}
+
+type conditionalDaoFactory struct {
+	*mockInterfaces.DaoFactoryInterface
+	*mockInterfaces.ConditionalS3ObjectFetcher
+}
+
+func (suite *DaoFactoryTestSuite) TestFetchS3ObjectIfChanged_UsesConditionalFetcher() {
+	daoFactory := mockInterfaces.NewDaoFactoryInterface(suite.T())
+	conditionalFetcher := mockInterfaces.NewConditionalS3ObjectFetcher(suite.T())
+	conditionalFetcher.EXPECT().
+		GetS3ObjectIfChanged(mock.Anything, "test-bucket", "test-key", `"etag-1"`).
+		Return(nil, true, nil).Once()
+
+	// No GetS3Object expectation: the mock fails the test if it is called.
+	result, notModified, err := FetchS3ObjectIfChanged(context.Background(), conditionalDaoFactory{daoFactory, conditionalFetcher}, "test-bucket", "test-key", `"etag-1"`)
+
+	assert.NoError(suite.T(), err)
+	assert.True(suite.T(), notModified)
+	assert.Nil(suite.T(), result)
+}
+
+func (suite *DaoFactoryTestSuite) TestFetchS3ObjectIfChanged_FallsBackToGetS3Object() {
+	daoFactory := mockInterfaces.NewDaoFactoryInterface(suite.T())
+	expectedOutput := &s3.GetObjectOutput{}
+	daoFactory.EXPECT().GetS3Object(mock.Anything, "test-bucket", "test-key").Return(expectedOutput, nil).Once()
+
+	result, notModified, err := FetchS3ObjectIfChanged(context.Background(), daoFactory, "test-bucket", "test-key", `"etag-1"`)
+
+	assert.NoError(suite.T(), err)
+	assert.False(suite.T(), notModified)
+	assert.Equal(suite.T(), expectedOutput, result)
 }
 
 func TestDaoFactorySuite(t *testing.T) {

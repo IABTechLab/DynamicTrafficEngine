@@ -23,10 +23,18 @@ func TestBloomFilterLoaderSuite(t *testing.T) {
 	suite.Run(t, new(BloomFilterLoaderTestSuite))
 }
 
+// conditionalDaoFactory is a DAO that also implements interfaces.ConditionalS3ObjectFetcher, as
+// repository.DaoFactory does.
+type conditionalDaoFactory struct {
+	*mockInterfaces.DaoFactoryInterface
+	*mockInterfaces.ConditionalS3ObjectFetcher
+}
+
 type BloomFilterLoaderTestSuite struct {
 	suite.Suite
 	store                     *BloomFilterStore
 	daoFactory                *mockInterfaces.DaoFactoryInterface
+	conditionalFetcher        *mockInterfaces.ConditionalS3ObjectFetcher
 	localCacheFactory         *mockInterfaces.LocalCacheFactoryInterface
 	modelConfigurationHandler *mockInterfaces.ModelConfigurationHandlerInterface
 	timeProvider              *mockInterfaces.TimeProvider
@@ -36,12 +44,13 @@ type BloomFilterLoaderTestSuite struct {
 func (suite *BloomFilterLoaderTestSuite) SetupTest() {
 	suite.store = NewBloomFilterStore()
 	suite.daoFactory = mockInterfaces.NewDaoFactoryInterface(suite.T())
+	suite.conditionalFetcher = mockInterfaces.NewConditionalS3ObjectFetcher(suite.T())
 	suite.localCacheFactory = mockInterfaces.NewLocalCacheFactoryInterface(suite.T())
 	suite.modelConfigurationHandler = mockInterfaces.NewModelConfigurationHandlerInterface(suite.T())
 	suite.timeProvider = mockInterfaces.NewTimeProvider(suite.T())
 	suite.loader = NewBloomFilterLoader(
 		suite.store,
-		suite.daoFactory,
+		conditionalDaoFactory{suite.daoFactory, suite.conditionalFetcher},
 		suite.localCacheFactory,
 		suite.modelConfigurationHandler,
 		suite.timeProvider,
@@ -114,7 +123,7 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_SkipsWhenETagUnchan
 
 	etag := "etag-unchanged-123"
 	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
-	suite.daoFactory.EXPECT().
+	suite.conditionalFetcher.EXPECT().
 		GetS3ObjectIfChanged(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/test_model.bloom", mock.Anything).
 		Return(&s3.GetObjectOutput{
 			ETag: &etag,
@@ -148,7 +157,7 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_StoresFilterOnSucce
 
 	etag := "etag-new-456"
 	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
-	suite.daoFactory.EXPECT().
+	suite.conditionalFetcher.EXPECT().
 		GetS3ObjectIfChanged(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/test_model.bloom", mock.Anything).
 		Return(&s3.GetObjectOutput{
 			ETag: &etag,
@@ -195,7 +204,7 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_NotModifiedSkipsDow
 	suite.localCacheFactory.EXPECT().
 		GetFromLocalCache(repository.CacheNameFileIdentifier, CacheKeyBloomFilterFileIdentifier+"_existing_model").
 		Return(etag, true).Once()
-	suite.daoFactory.EXPECT().
+	suite.conditionalFetcher.EXPECT().
 		GetS3ObjectIfChanged(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/existing_model.bloom", etag).
 		Return(nil, true, nil).Once()
 
@@ -206,6 +215,37 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_NotModifiedSkipsDow
 	filter, found := suite.store.Get("existing_model")
 	suite.True(found)
 	suite.Same(existingFilter, filter)
+}
+
+func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_FallsBackToGetS3ObjectWithoutConditionalFetcher() {
+	loader := NewBloomFilterLoader(suite.store, suite.daoFactory, suite.localCacheFactory, suite.modelConfigurationHandler, suite.timeProvider)
+	fixedTime := time.Date(2024, 3, 15, 14, 0, 0, 0, time.UTC)
+	suite.timeProvider.EXPECT().Now().Return(fixedTime).Once()
+
+	modelDef := interfaces.ModelDefinition{
+		Identifier: "test_model",
+		S3PathMode: interfaces.S3PathModeDynamic,
+	}
+
+	etag := "etag-unchanged-123"
+	suite.localCacheFactory.EXPECT().
+		GetFromLocalCache(repository.CacheNameFileIdentifier, CacheKeyBloomFilterFileIdentifier+"_test_model").
+		Return(etag, true).Once()
+	suite.daoFactory.EXPECT().
+		GetS3Object(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/test_model.bloom").
+		Return(&s3.GetObjectOutput{
+			ETag: &etag,
+			Body: io.NopCloser(strings.NewReader("")),
+		}, nil).Once()
+	suite.localCacheFactory.EXPECT().
+		ShouldRefresh(CacheKeyBloomFilterFileIdentifier+"_test_model", etag).
+		Return(false).Once()
+
+	err := loader.loadSingleModel("test_ssp", repository.S3Prefix+"test-bucket", "test_model", modelDef)
+
+	suite.NoError(err)
+	_, found := suite.store.Get("test_model")
+	suite.False(found)
 }
 
 func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_PreservesExistingStateOnS3NotFoundError() {
@@ -225,7 +265,7 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_PreservesExistingSt
 
 	// S3 returns not-found error
 	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
-	suite.daoFactory.EXPECT().
+	suite.conditionalFetcher.EXPECT().
 		GetS3ObjectIfChanged(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/existing_model.bloom", mock.Anything).
 		Return(nil, false, fmt.Errorf("NoSuchKey: The specified key does not exist")).Once()
 
@@ -259,7 +299,7 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_PreservesExistingSt
 
 	etag := "etag-new-789"
 	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
-	suite.daoFactory.EXPECT().
+	suite.conditionalFetcher.EXPECT().
 		GetS3ObjectIfChanged(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/existing_model.bloom", mock.Anything).
 		Return(&s3.GetObjectOutput{
 			ETag: &etag,
@@ -319,7 +359,7 @@ func (suite *BloomFilterLoaderTestSuite) TestLoad_SkipsNonBloomFilterModels() {
 	bloomData := suite.createBloomFilterBytes("bloom_key")
 	etag := "etag-bloom"
 	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
-	suite.daoFactory.EXPECT().
+	suite.conditionalFetcher.EXPECT().
 		GetS3ObjectIfChanged(mock.Anything, "my-bucket", "test_ssp/models/bloom_model.bloom", mock.Anything).
 		Return(&s3.GetObjectOutput{
 			ETag: &etag,

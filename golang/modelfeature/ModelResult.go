@@ -115,7 +115,7 @@ func (t *ModelResultHandler) loadSingleModel(sspIdentifier string, modelIdentifi
 	if strings.HasPrefix(t.folderPrefix, repository.S3Prefix) {
 		// get bucket name from "s3://<bucket-name>"
 		s3BucketName := strings.TrimPrefix(t.folderPrefix, repository.S3Prefix)
-		getObjectOutput, notModified, s3Error := t.daoFactory.GetS3ObjectIfChanged(context.TODO(), s3BucketName, modelResultFileName, repository.CachedFileIdentifier(t.localCacheFactory, repository.CacheKeyModelResultFileIdentifier))
+		getObjectOutput, notModified, s3Error := repository.FetchS3ObjectIfChanged(context.TODO(), t.daoFactory, s3BucketName, modelResultFileName, repository.CachedFileIdentifier(t.localCacheFactory, repository.CacheKeyModelResultFileIdentifier))
 		if s3Error != nil {
 			Logger.Error().Msgf("Error fetching S3 file %s/%s: %v", s3BucketName, modelResultFileName, s3Error)
 			return nil

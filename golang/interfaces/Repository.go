@@ -65,7 +65,11 @@ type DaoFactoryInterface interface {
 
 	// Fetch the metadata of an S3 object. This does not fetch the contents of the object.
 	GetS3Object(ctx context.Context, bucket string, key string) (*s3.GetObjectOutput, error)
+}
 
+// ConditionalS3ObjectFetcher is an optional extension of DaoFactoryInterface. Loaders use it when the
+// DAO implements it and fall back to GetS3Object otherwise, so existing implementations keep working.
+type ConditionalS3ObjectFetcher interface {
 	// Fetch an S3 object unless its ETag equals knownETag, in which case notModified is true and no
 	// body is transferred. An empty knownETag always fetches the object.
 	GetS3ObjectIfChanged(ctx context.Context, bucket string, key string, knownETag string) (output *s3.GetObjectOutput, notModified bool, err error)

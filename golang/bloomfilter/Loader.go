@@ -87,7 +87,7 @@ func (l *BloomFilterLoader) loadSingleModel(sspIdentifier string, folderPrefix s
 	s3BucketName := strings.TrimPrefix(folderPrefix, repository.S3Prefix)
 	// Use a per-model cache key for ETag change detection
 	cacheKey := CacheKeyBloomFilterFileIdentifier + "_" + modelIdentifier
-	getObjectOutput, notModified, err := l.daoFactory.GetS3ObjectIfChanged(context.TODO(), s3BucketName, s3Path, repository.CachedFileIdentifier(l.localCacheFactory, cacheKey))
+	getObjectOutput, notModified, err := repository.FetchS3ObjectIfChanged(context.TODO(), l.daoFactory, s3BucketName, s3Path, repository.CachedFileIdentifier(l.localCacheFactory, cacheKey))
 	if err != nil {
 		loaderLogger.Warn().Msgf("Bloom filter file not found or S3 error for %s/%s: %v", s3BucketName, s3Path, err)
 		return fmt.Errorf("error fetching bloom filter S3 file %s/%s: %w", s3BucketName, s3Path, err)

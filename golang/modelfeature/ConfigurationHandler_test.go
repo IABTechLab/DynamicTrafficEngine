@@ -29,6 +29,8 @@ type ConfigurationHandlerTestSuite struct {
 	experimentConfigurationHandler *ConfigurationHandler[interfaces.ExperimentConfiguration]
 	localCacheFactory              *mockInterfaces.LocalCacheFactoryInterface
 	daoFactory                     *mockInterfaces.DaoFactoryInterface
+	conditionalFetcher             *mockInterfaces.ConditionalS3ObjectFetcher
+	dao                            interfaces.DaoFactoryInterface
 	folderPrefix                   string
 	s3FolderPrefix                 string
 }
@@ -36,6 +38,8 @@ type ConfigurationHandlerTestSuite struct {
 func (suite *ConfigurationHandlerTestSuite) SetupTest() {
 	suite.localCacheFactory = mockInterfaces.NewLocalCacheFactoryInterface(suite.T())
 	suite.daoFactory = mockInterfaces.NewDaoFactoryInterface(suite.T())
+	suite.conditionalFetcher = mockInterfaces.NewConditionalS3ObjectFetcher(suite.T())
+	suite.dao = conditionalDaoFactory{suite.daoFactory, suite.conditionalFetcher}
 
 	dir, err := os.Getwd()
 	suite.NoError(err, "Failed to get current working directory")
@@ -47,7 +51,7 @@ func (suite *ConfigurationHandlerTestSuite) SetupTest() {
 }
 
 func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_Success() {
-	suite.experimentConfigurationHandler = NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.daoFactory, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", suite.localCacheFactory)
+	suite.experimentConfigurationHandler = NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.dao, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", suite.localCacheFactory)
 
 	suite.localCacheFactory.EXPECT().
 		ShouldRefresh(repository.CacheKeyExperimentConfigurationFileIdentifier, mock.Anything).
@@ -56,7 +60,7 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 	fileContent, err := os.ReadFile(suite.folderPrefix + "/ssp/configuration/experiment/config.json")
 	suite.NoError(err, "Failed to read file")
 	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
-	suite.daoFactory.EXPECT().
+	suite.conditionalFetcher.EXPECT().
 		GetS3ObjectIfChanged(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, false, nil).
 		Once()
@@ -75,13 +79,13 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 }
 
 func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_NotModifiedSkipsDownload() {
-	suite.experimentConfigurationHandler = NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.daoFactory, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", suite.localCacheFactory)
+	suite.experimentConfigurationHandler = NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.dao, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", suite.localCacheFactory)
 
 	suite.localCacheFactory.EXPECT().
 		GetFromLocalCache(repository.CacheNameFileIdentifier, repository.CacheKeyExperimentConfigurationFileIdentifier).
 		Return(eTagString, true).
 		Once()
-	suite.daoFactory.EXPECT().
+	suite.conditionalFetcher.EXPECT().
 		GetS3ObjectIfChanged(mock.Anything, mock.Anything, mock.Anything, eTagString).
 		Return(nil, true, nil).
 		Once()
@@ -92,11 +96,32 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 	suite.False(success, "Unchanged experiment configuration should not be reloaded")
 }
 
-func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_ReturnError_FileNotFound() {
+func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_FallsBackToGetS3ObjectWithoutConditionalFetcher() {
 	suite.experimentConfigurationHandler = NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.daoFactory, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", suite.localCacheFactory)
 
-	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
+	suite.localCacheFactory.EXPECT().
+		GetFromLocalCache(repository.CacheNameFileIdentifier, repository.CacheKeyExperimentConfigurationFileIdentifier).
+		Return(eTagString, true).
+		Once()
 	suite.daoFactory.EXPECT().
+		GetS3Object(mock.Anything, mock.Anything, mock.Anything).
+		Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).
+		Once()
+	suite.localCacheFactory.EXPECT().
+		ShouldRefresh(repository.CacheKeyExperimentConfigurationFileIdentifier, eTagString).
+		Return(false).
+		Once()
+
+	success, err := suite.experimentConfigurationHandler.Load()
+	suite.NoError(err)
+	suite.False(success, "Unchanged experiment configuration should not be reloaded")
+}
+
+func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_ReturnError_FileNotFound() {
+	suite.experimentConfigurationHandler = NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.dao, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", suite.localCacheFactory)
+
+	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
+	suite.conditionalFetcher.EXPECT().
 		GetS3ObjectIfChanged(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, false, fmt.Errorf("failed to get object from S3: error")).
 		Once()
@@ -107,14 +132,14 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 }
 
 func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_NotLoadSinceShouldNotRefresh() {
-	suite.experimentConfigurationHandler = NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.daoFactory, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", suite.localCacheFactory)
+	suite.experimentConfigurationHandler = NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.dao, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", suite.localCacheFactory)
 
 	suite.localCacheFactory.EXPECT().
 		ShouldRefresh(repository.CacheKeyExperimentConfigurationFileIdentifier, mock.Anything).
 		Return(false).
 		Once()
 	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
-	suite.daoFactory.EXPECT().
+	suite.conditionalFetcher.EXPECT().
 		GetS3ObjectIfChanged(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, false, nil).
 		Once()
@@ -125,14 +150,14 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 }
 
 func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_ReturnError_ReadContentError() {
-	suite.experimentConfigurationHandler = NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.daoFactory, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", suite.localCacheFactory)
+	suite.experimentConfigurationHandler = NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.dao, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", suite.localCacheFactory)
 
 	suite.localCacheFactory.EXPECT().
 		ShouldRefresh(repository.CacheKeyExperimentConfigurationFileIdentifier, mock.Anything).
 		Return(true).
 		Once()
 	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
-	suite.daoFactory.EXPECT().
+	suite.conditionalFetcher.EXPECT().
 		GetS3ObjectIfChanged(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, false, nil).
 		Once()
@@ -147,7 +172,7 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 }
 
 func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_ReturnError_InvalidJsonData() {
-	suite.experimentConfigurationHandler = NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.daoFactory, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", suite.localCacheFactory)
+	suite.experimentConfigurationHandler = NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.dao, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", suite.localCacheFactory)
 
 	suite.localCacheFactory.EXPECT().
 		ShouldRefresh(repository.CacheKeyExperimentConfigurationFileIdentifier, mock.Anything).
@@ -155,7 +180,7 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 		Once()
 	fileContent := []byte("invalid-json-data")
 	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
-	suite.daoFactory.EXPECT().
+	suite.conditionalFetcher.EXPECT().
 		GetS3ObjectIfChanged(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, false, nil).
 		Once()
@@ -170,7 +195,7 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 }
 
 func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_ReturnError_PutToLocalCacheError() {
-	suite.experimentConfigurationHandler = NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.daoFactory, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", suite.localCacheFactory)
+	suite.experimentConfigurationHandler = NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.dao, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", suite.localCacheFactory)
 
 	suite.localCacheFactory.EXPECT().
 		ShouldRefresh(repository.CacheKeyExperimentConfigurationFileIdentifier, mock.Anything).
@@ -179,7 +204,7 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 	fileContent, err := os.ReadFile(suite.folderPrefix + "/ssp/configuration/experiment/config.json")
 	suite.NoError(err, "Failed to read file")
 	suite.localCacheFactory.EXPECT().GetFromLocalCache(repository.CacheNameFileIdentifier, mock.Anything).Return(nil, false).Once()
-	suite.daoFactory.EXPECT().
+	suite.conditionalFetcher.EXPECT().
 		GetS3ObjectIfChanged(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, false, nil).
 		Once()

@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
+	"golang.a2z.com/demanddriventrafficevaluator/interfaces"
 )
 
 const S3Prefix = "s3://"
@@ -26,7 +27,7 @@ type S3ClientAPI interface {
 	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
-// Implements DaoFactoryInterface.
+// Implements DaoFactoryInterface and ConditionalS3ObjectFetcher.
 type DaoFactory struct {
 	s3Client S3ClientAPI
 }
@@ -99,6 +100,19 @@ func (t *DaoFactory) GetS3ObjectIfChanged(ctx context.Context, bucket string, ke
 		return nil, false, fmt.Errorf("failed to get object from S3: %w", err)
 	}
 	return result, false, nil
+}
+
+var _ interfaces.ConditionalS3ObjectFetcher = (*DaoFactory)(nil)
+
+// FetchS3ObjectIfChanged fetches an S3 object through daoFactory's conditional GET when it implements
+// interfaces.ConditionalS3ObjectFetcher. Otherwise it falls back to an unconditional GetS3Object, and
+// notModified is always false.
+func FetchS3ObjectIfChanged(ctx context.Context, daoFactory interfaces.DaoFactoryInterface, bucket string, key string, knownETag string) (*s3.GetObjectOutput, bool, error) {
+	if conditional, ok := daoFactory.(interfaces.ConditionalS3ObjectFetcher); ok {
+		return conditional.GetS3ObjectIfChanged(ctx, bucket, key, knownETag)
+	}
+	output, err := daoFactory.GetS3Object(ctx, bucket, key)
+	return output, false, err
 }
 
 func handleS3Error(err error) error {

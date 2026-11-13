@@ -54,7 +54,7 @@ func (t *ConfigurationHandler[T]) Load() (bool, error) {
 		s3BucketName := strings.TrimPrefix(t.folderPrefix, repository.S3Prefix)
 		Logger.Info().Msgf("bucketname: %s", s3BucketName)
 
-		getObjectOutput, notModified, s3Error := t.daoFactory.GetS3ObjectIfChanged(context.TODO(), s3BucketName, filename, repository.CachedFileIdentifier(t.localCacheFactory, t.fileIdentifierCacheKey))
+		getObjectOutput, notModified, s3Error := repository.FetchS3ObjectIfChanged(context.TODO(), t.daoFactory, s3BucketName, filename, repository.CachedFileIdentifier(t.localCacheFactory, t.fileIdentifierCacheKey))
 		if s3Error != nil {
 			return false, fmt.Errorf("error fetching s3 file: %v", s3Error)
 		}
