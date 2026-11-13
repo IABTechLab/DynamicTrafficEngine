@@ -5,6 +5,7 @@ package repository
 
 import (
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +29,12 @@ const CacheKeyModelConfigurationFileIdentifier = "ModelConfigurationFileIdentifi
 const CacheKeyModelResultFileIdentifier = "ModelResultFileIdentifier"
 const CacheKeyExperiment = "Experiment"
 const CacheKeyExperimentConfigurationFileIdentifier = "ExperimentConfigurationFileIdentifier"
+
+// ModelResultFileIdentifierCacheKey returns the per-model cache key used to track
+// the identifier for a rule-based model's result file.
+func ModelResultFileIdentifierCacheKey(modelIdentifier string) string {
+	return CacheKeyModelResultFileIdentifier + "_" + modelIdentifier
+}
 
 // Implements LocalCacheRegistryInterface.
 type LocalCacheRegistry struct {
@@ -164,11 +171,7 @@ func (t *LocalCacheFactory) ShouldRefresh(fileIdentifierCacheKey string, fileIde
 	fileIdentifierInCache, found := t.GetFromLocalCache(CacheNameFileIdentifier, fileIdentifierCacheKey)
 	stale := !found || fileIdentifierInCache != fileIdentifier
 	if stale {
-		if fileIdentifierCacheKey == CacheKeyModelResultFileIdentifier { // default TTL, since model rules will expire in default TTL
-			t.PutToLocalCache(CacheNameFileIdentifier, fileIdentifierCacheKey, fileIdentifier)
-		} else { // no TTL, since config files will not expire
-			t.PutToLocalCacheWithTTL(CacheNameFileIdentifier, fileIdentifierCacheKey, fileIdentifier, 0)
-		}
+		t.putFileIdentifier(fileIdentifierCacheKey, fileIdentifier)
 	}
 	return stale
 }
@@ -179,15 +182,16 @@ func (t *LocalCacheFactory) ShouldRefreshLocal(fileIdentifierCacheKey string, fi
 		Logger.Error().Msgf("error getting file info: %v", err)
 		return false
 	}
-	fileIdentifier := fileInfo.ModTime().String()
-	fileIdentifierInCache, found := t.GetFromLocalCache(CacheNameFileIdentifier, fileIdentifierCacheKey)
-	stale := !found || fileIdentifierInCache != fileIdentifier
-	if stale {
-		if fileIdentifierCacheKey == CacheKeyModelResultFileIdentifier { // default TTL, since model rules will expire in default TTL
-			t.PutToLocalCache(CacheNameFileIdentifier, fileIdentifierCacheKey, fileIdentifier)
-		} else { // no TTL, since config files will not expire
-			t.PutToLocalCacheWithTTL(CacheNameFileIdentifier, fileIdentifierCacheKey, fileIdentifier, 0)
-		}
+	return t.ShouldRefresh(fileIdentifierCacheKey, fileInfo.ModTime().String())
+}
+
+// putFileIdentifier stores a file identifier with the TTL matching the data it tracks.
+// Model result keys (bare or per-model) use the default TTL, since model rules expire
+// with the default TTL. All other keys (configs, bloom filters) never expire.
+func (t *LocalCacheFactory) putFileIdentifier(fileIdentifierCacheKey string, fileIdentifier string) {
+	if strings.HasPrefix(fileIdentifierCacheKey, CacheKeyModelResultFileIdentifier) {
+		t.PutToLocalCache(CacheNameFileIdentifier, fileIdentifierCacheKey, fileIdentifier)
+	} else {
+		t.PutToLocalCacheWithTTL(CacheNameFileIdentifier, fileIdentifierCacheKey, fileIdentifier, 0)
 	}
-	return stale
 }
