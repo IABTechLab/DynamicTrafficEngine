@@ -108,6 +108,7 @@ func (t *ModelResultHandler) Load(sspIdentifier string) error {
 
 func (t *ModelResultHandler) loadSingleModel(sspIdentifier string, modelIdentifier string, modelResultValue float32, putItemCounter *int, putItemTotalSize *int64) error {
 	modelResultFileName := t.BuildModelResultFileName(sspIdentifier, modelIdentifier)
+	fileIdentifierCacheKey := repository.ModelResultFileIdentifierCacheKey(modelIdentifier)
 
 	var modelResult []byte
 	var repositoryError error
@@ -126,12 +127,13 @@ func (t *ModelResultHandler) loadSingleModel(sspIdentifier string, modelIdentifi
 			_ = getObjectOutput.Body.Close()
 		}()
 
-		if !t.localCacheFactory.ShouldRefresh(repository.CacheKeyModelResultFileIdentifier, *(getObjectOutput.ETag)) {
+		if !t.localCacheFactory.ShouldRefresh(fileIdentifierCacheKey, *(getObjectOutput.ETag)) {
 			Logger.Info().Msgf("Skipping refresh for %s", modelResultFileName)
 			return nil
 		}
 
 		modelResult, repositoryError = t.daoFactory.ReadContent(getObjectOutput.Body)
+
 	} else {
 		// read from local file path
 		filePath := filepath.Join(t.folderPrefix, modelResultFileName)
@@ -145,13 +147,22 @@ func (t *ModelResultHandler) loadSingleModel(sspIdentifier string, modelIdentifi
 			_ = filePointer.Close()
 		}()
 
-		if !t.localCacheFactory.ShouldRefreshLocal(repository.CacheKeyModelResultFileIdentifier, filePointer) {
+		if !t.localCacheFactory.ShouldRefreshLocal(fileIdentifierCacheKey, filePointer) {
 			Logger.Info().Msgf("Skipping refresh for %s", filePath)
 			return nil
 		}
 
 		modelResult, repositoryError = t.daoFactory.GetDataFromLocal(filePointer)
 	}
+
+	// ShouldRefresh* has already saved the new file identifier. Reset it unless the load
+	// succeeds, so the next Load retries this file instead of skipping it.
+	loaded := false
+	defer func() {
+		if !loaded {
+			repository.ResetFileIdentifier(t.localCacheFactory, fileIdentifierCacheKey)
+		}
+	}()
 
 	if repositoryError != nil {
 		return fmt.Errorf("error getting data %w", repositoryError)
@@ -180,6 +191,8 @@ func (t *ModelResultHandler) loadSingleModel(sspIdentifier string, modelIdentifi
 		*putItemCounter++
 		*putItemTotalSize += int64(len(record[0])) // Only count the size of the Key, not the entire modelResultKeys
 	}
+	// Bad rows and failed puts are logged and skipped above; they still count as successful load.
+	loaded = true
 	return nil
 }
 

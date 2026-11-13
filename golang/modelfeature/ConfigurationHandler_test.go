@@ -119,6 +119,12 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 		Return(nil, fmt.Errorf("ReadContent Error")).
 		Once()
 
+	// The failed load resets the saved file identifier so the next Load retries.
+	suite.localCacheFactory.EXPECT().
+		PutToLocalCacheWithTTL(repository.CacheNameFileIdentifier, repository.CacheKeyExperimentConfigurationFileIdentifier, "", int64(0)).
+		Return(true).
+		Once()
+
 	success, err := suite.experimentConfigurationHandler.Load()
 	suite.EqualError(err, "error getting data: ReadContent Error")
 	suite.False(success, "Experiment configuration should not be loaded successfully")
@@ -139,6 +145,12 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 	suite.daoFactory.EXPECT().
 		ReadContent(mock.Anything).
 		Return(fileContent, nil).
+		Once()
+
+	// The failed load resets the saved file identifier so the next Load retries.
+	suite.localCacheFactory.EXPECT().
+		PutToLocalCacheWithTTL(repository.CacheNameFileIdentifier, repository.CacheKeyExperimentConfigurationFileIdentifier, "", int64(0)).
+		Return(true).
 		Once()
 
 	success, err := suite.experimentConfigurationHandler.Load()
@@ -166,6 +178,12 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_S3_
 	suite.localCacheFactory.EXPECT().
 		PutToLocalCacheWithTTL(repository.CacheNameConfiguration, repository.CacheKeyExperiment, mock.Anything, int64(0)).
 		Return(false).
+		Once()
+
+	// The failed load resets the saved file identifier so the next Load retries.
+	suite.localCacheFactory.EXPECT().
+		PutToLocalCacheWithTTL(repository.CacheNameFileIdentifier, repository.CacheKeyExperimentConfigurationFileIdentifier, "", int64(0)).
+		Return(true).
 		Once()
 
 	success, err := suite.experimentConfigurationHandler.Load()
@@ -222,6 +240,12 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_Ret
 		GetDataFromLocal(mock.Anything).
 		Return(nil, fmt.Errorf("GetDataFromLocal Error")).
 		Once()
+	// The failed load resets the saved file identifier so the next Load retries.
+	suite.localCacheFactory.EXPECT().
+		PutToLocalCacheWithTTL(repository.CacheNameFileIdentifier, repository.CacheKeyExperimentConfigurationFileIdentifier, "", int64(0)).
+		Return(true).
+		Once()
+
 	success, err := suite.experimentConfigurationHandler.Load()
 	suite.EqualError(err, "error getting data: GetDataFromLocal Error")
 	suite.False(success, "Experiment configuration should not be loaded successfully")
@@ -236,6 +260,12 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_Ret
 	suite.daoFactory.EXPECT().
 		GetDataFromLocal(mock.Anything).
 		Return(fileContent, nil).
+		Once()
+
+	// The failed load resets the saved file identifier so the next Load retries.
+	suite.localCacheFactory.EXPECT().
+		PutToLocalCacheWithTTL(repository.CacheNameFileIdentifier, repository.CacheKeyExperimentConfigurationFileIdentifier, "", int64(0)).
+		Return(true).
 		Once()
 
 	success, err := suite.experimentConfigurationHandler.Load()
@@ -257,6 +287,12 @@ func (suite *ConfigurationHandlerTestSuite) TestLoad_ExperimentConfiguration_Ret
 	suite.localCacheFactory.EXPECT().
 		PutToLocalCacheWithTTL(repository.CacheNameConfiguration, repository.CacheKeyExperiment, mock.Anything, int64(0)).
 		Return(false).
+		Once()
+
+	// The failed load resets the saved file identifier so the next Load retries.
+	suite.localCacheFactory.EXPECT().
+		PutToLocalCacheWithTTL(repository.CacheNameFileIdentifier, repository.CacheKeyExperimentConfigurationFileIdentifier, "", int64(0)).
+		Return(true).
 		Once()
 
 	success, err := suite.experimentConfigurationHandler.Load()
@@ -297,4 +333,28 @@ func (suite *ConfigurationHandlerTestSuite) TestProvide_ExperimentConfiguration_
 	actualConfig, err := suite.experimentConfigurationHandler.Provide()
 	suite.EqualError(err, "retrieved config is not of type [experiment]")
 	suite.Nil(actualConfig, "Experiment configuration should be nil")
+}
+
+// Regression test for issue #29: a failed load must not leave the new ETag saved, or the
+// next Load skips the file until it changes again.
+func (suite *ConfigurationHandlerTestSuite) TestLoad_S3_RetriesAfterInvalidJson() {
+	localCacheFactory := repository.NewLocalCacheFactory()
+	handler := NewConfigurationHandler[interfaces.ExperimentConfiguration](suite.s3FolderPrefix, "ssp", suite.daoFactory, repository.CacheKeyExperimentConfigurationFileIdentifier, repository.CacheKeyExperiment, "experiment", localCacheFactory)
+
+	fileContent, err := os.ReadFile(suite.folderPrefix + "/ssp/configuration/experiment/config.json")
+	suite.Require().NoError(err)
+	suite.daoFactory.EXPECT().
+		GetS3Object(mock.Anything, mock.Anything, mock.Anything).
+		Return(&s3.GetObjectOutput{ETag: &eTagString, Body: io.NopCloser(strings.NewReader(""))}, nil).
+		Times(2) // same ETag both times
+	suite.daoFactory.EXPECT().ReadContent(mock.Anything).Return([]byte("invalid-json-data"), nil).Once()
+	suite.daoFactory.EXPECT().ReadContent(mock.Anything).Return(fileContent, nil).Once()
+
+	success, err := handler.Load()
+	suite.Error(err, "first load")
+	suite.False(success, "first load")
+
+	success, err = handler.Load()
+	suite.NoError(err, "second load")
+	suite.True(success, "second load must retry the unchanged file")
 }

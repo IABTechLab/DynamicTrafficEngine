@@ -241,6 +241,11 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_PreservesExistingSt
 		ReadContent(mock.Anything).
 		Return([]byte("invalid-bloom-data-garbage"), nil).Once()
 
+	// The failed load resets the saved ETag so the next Load retries.
+	suite.localCacheFactory.EXPECT().
+		PutToLocalCacheWithTTL(repository.CacheNameFileIdentifier, CacheKeyBloomFilterFileIdentifier+"_existing_model", "", int64(0)).
+		Return(true).Once()
+
 	loadErr := suite.loader.loadSingleModel("test_ssp", repository.S3Prefix+"test-bucket", "existing_model", modelDef)
 
 	// Error is returned
@@ -252,6 +257,34 @@ func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_PreservesExistingSt
 	suite.True(found)
 	suite.NotNil(filter)
 	suite.True(filter.MightContain("existing_key"))
+}
+
+// Regression test for issue #29: a failed deserialize must not leave the new ETag saved, or
+// the next Load skips the filter until its file changes again.
+func (suite *BloomFilterLoaderTestSuite) TestLoadSingleModel_RetriesAfterDeserializationFailure() {
+	loader := NewBloomFilterLoader(suite.store, suite.daoFactory, repository.NewLocalCacheFactory(), suite.modelConfigurationHandler, suite.timeProvider)
+
+	fixedTime := time.Date(2024, 3, 15, 14, 0, 0, 0, time.UTC)
+	suite.timeProvider.EXPECT().Now().Return(fixedTime).Times(2)
+	modelDef := interfaces.ModelDefinition{Identifier: "test_model", S3PathMode: interfaces.S3PathModeDynamic}
+
+	etag := "etag-unchanged"
+	suite.daoFactory.EXPECT().
+		GetS3Object(mock.Anything, "test-bucket", "test_ssp/2024-03-15/14/test_model.bloom").
+		Return(&s3.GetObjectOutput{ETag: &etag, Body: io.NopCloser(strings.NewReader(""))}, nil).
+		Times(2) // same ETag both times
+	suite.daoFactory.EXPECT().ReadContent(mock.Anything).Return([]byte("invalid-bloom-data-garbage"), nil).Once()
+	suite.daoFactory.EXPECT().ReadContent(mock.Anything).Return(suite.createBloomFilterBytes("key1"), nil).Once()
+
+	err := loader.loadSingleModel("test_ssp", repository.S3Prefix+"test-bucket", "test_model", modelDef)
+	suite.Error(err, "first load")
+	suite.Contains(err.Error(), "error deserializing bloom filter")
+
+	err = loader.loadSingleModel("test_ssp", repository.S3Prefix+"test-bucket", "test_model", modelDef)
+	suite.NoError(err, "second load must retry the unchanged file")
+	filter, found := suite.store.Get("test_model")
+	suite.True(found)
+	suite.True(filter.MightContain("key1"))
 }
 
 // --- Load Tests ---
