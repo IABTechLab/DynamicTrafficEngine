@@ -3,6 +3,7 @@
 
 package com.amazon.demanddriventrafficevaluator.repository.loader.model;
 
+import com.amazon.demanddriventrafficevaluator.repository.dao.ConditionalGetResult;
 import com.amazon.demanddriventrafficevaluator.repository.dao.Dao;
 import com.amazon.demanddriventrafficevaluator.repository.loader.DefaultLoader;
 import com.google.common.annotations.VisibleForTesting;
@@ -78,22 +79,30 @@ public class RuleBasedModelResultLoader extends DefaultLoader<ModelResultLoaderI
         String fileKey = getS3ObjectKey(input);
 
         // write a function to split resultLocation into identifier and key
-        try (InputStream inputStream = fileDao.get(input.getS3Bucket(), fileKey)
-                .orElseThrow(() -> ResourceNotFoundException.builder().message("Model result file not found: " + fileKey).build());
-             BufferedReader reader = getBufferedReader(inputStream)) {
-            if (!shouldRefresh(modelIdentifier, inputStream)) {
+        try {
+            ConditionalGetResult<InputStream> file =
+                    getFileIfChanged(fileDao, input.getS3Bucket(), fileKey, modelIdentifier);
+            if (file.isNotModified()) {
                 log.debug("RuleBasedModelResultLoader is not refreshed");
                 return false;
             }
+            try (InputStream inputStream = file.getValue()
+                    .orElseThrow(() -> ResourceNotFoundException.builder().message("Model result file not found: " + fileKey).build());
+                 BufferedReader reader = getBufferedReader(inputStream)) {
+                if (!shouldRefresh(modelIdentifier, inputStream)) {
+                    log.debug("RuleBasedModelResultLoader is not refreshed");
+                    return false;
+                }
 
-            // invalidate cache since new model is detected
-            modelResultsCacheDao.clear(modelIdentifier);
+                // invalidate cache since new model is detected
+                modelResultsCacheDao.clear(modelIdentifier);
 
-            String modelResult;
-            while ((modelResult = reader.readLine()) != null) {
-                modelResultsCacheDao.put(modelIdentifier, modelResult, input.getModelType().getCacheValue());
-                putItemCounter++;
-                putItemTotalSize += modelResult.length();
+                String modelResult;
+                while ((modelResult = reader.readLine()) != null) {
+                    modelResultsCacheDao.put(modelIdentifier, modelResult, input.getModelType().getCacheValue());
+                    putItemCounter++;
+                    putItemTotalSize += modelResult.length();
+                }
             }
         } catch (ResourceNotFoundException e) {
             log.warn(e);

@@ -3,6 +3,7 @@
 
 package com.amazon.demanddriventrafficevaluator.repository.loader.configuration;
 
+import com.amazon.demanddriventrafficevaluator.repository.dao.ConditionalGetResult;
 import com.amazon.demanddriventrafficevaluator.repository.dao.Dao;
 import com.amazon.demanddriventrafficevaluator.repository.dao.LocalCacheDao;
 import com.amazon.demanddriventrafficevaluator.repository.entity.ModelConfiguration;
@@ -10,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Answers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.core.ResponseInputStream;
@@ -27,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.never;
@@ -40,7 +43,8 @@ class DefaultConfigurationLoaderTest {
     private static final String CONFIG_CACHE_KEY = "testConfigKey";
     @Mock
     private Dao<String, String> mockFileIdentifierCacheDao;
-    @Mock
+    // CALLS_REAL_METHODS: the default Dao.getIfChanged delegates to the stubbed get().
+    @Mock(answer = Answers.CALLS_REAL_METHODS)
     private Dao<String, InputStream> mockFileDao;
     @Mock
     private LocalCacheDao<String, ModelConfiguration> mockConfigurationCacheDao;
@@ -102,6 +106,25 @@ class DefaultConfigurationLoaderTest {
         assertTrue(result);
         verify(mockConfigurationCacheDao).put(CACHE_IDENTIFIER_CONFIGURATION, CONFIG_CACHE_KEY, mockModelConfiguration);
         verify(mockFileIdentifierCacheDao).put("model-results-identifier", "testConfigKey", "eTag");
+    }
+
+    @Test
+    void testLoad_NotModified_SkipsWithoutDownloading() throws IOException {
+        // Arrange
+        ConfigurationLoaderInput input = new ConfigurationLoaderInput("testBucket", "testKey", "testVendor", "testType");
+        String s3ObjectKey = "testVendor/configuration/testType/config.json";
+        when(mockFileIdentifierCacheDao.get("model-results-identifier", CONFIG_CACHE_KEY)).thenReturn(Optional.of("eTag"));
+        doReturn(ConditionalGetResult.notModified()).when(mockFileDao).getIfChanged("testBucket", s3ObjectKey, "eTag");
+
+        // Act
+        boolean result = loader.load(input);
+
+        // Assert
+        assertFalse(result);
+        verify(mockFileDao, never()).get(anyString(), anyString());
+        verify(mockMapper, never()).readValue(any(InputStream.class), eq(ModelConfiguration.class));
+        verify(mockConfigurationCacheDao, never()).put(anyString(), anyString(), any());
+        verify(mockFileIdentifierCacheDao, never()).put(anyString(), anyString(), anyString());
     }
 
     @Test

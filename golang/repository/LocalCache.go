@@ -173,6 +173,17 @@ func (t *LocalCacheFactory) ShouldRefresh(fileIdentifierCacheKey string, fileIde
 	return stale
 }
 
+// CachedFileIdentifier returns the file identifier (ETag) cached under fileIdentifierCacheKey by
+// ShouldRefresh, or "" if there is none, so that a loader can ask S3 to skip an unchanged file.
+func CachedFileIdentifier(localCacheFactory interfaces.LocalCacheFactoryInterface, fileIdentifierCacheKey string) string {
+	value, found := localCacheFactory.GetFromLocalCache(CacheNameFileIdentifier, fileIdentifierCacheKey)
+	if !found {
+		return ""
+	}
+	fileIdentifier, _ := value.(string)
+	return fileIdentifier
+}
+
 func (t *LocalCacheFactory) ShouldRefreshLocal(fileIdentifierCacheKey string, filePointer *os.File) bool {
 	fileInfo, err := filePointer.Stat()
 	if err != nil {

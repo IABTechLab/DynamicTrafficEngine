@@ -3,6 +3,7 @@
 
 package com.amazon.demanddriventrafficevaluator.repository.loader.configuration;
 
+import com.amazon.demanddriventrafficevaluator.repository.dao.ConditionalGetResult;
 import com.amazon.demanddriventrafficevaluator.repository.dao.Dao;
 import com.amazon.demanddriventrafficevaluator.repository.dao.LocalCacheDao;
 import com.amazon.demanddriventrafficevaluator.repository.entity.Configuration;
@@ -70,15 +71,23 @@ public class DefaultConfigurationLoader<T extends Configuration> extends Default
     @Override
     public boolean load(ConfigurationLoaderInput input) {
         String fileKey = getS3ObjectKey(input);
-        try (InputStream configurationStream = fileDao.get(input.getS3Bucket(), fileKey)
-                .orElseThrow(() -> new IllegalArgumentException("Cannot Access to the Data with key: " + fileKey))) {
-            if (!shouldRefresh(configurationCacheKey, configurationStream)) {
+        try {
+            ConditionalGetResult<InputStream> file =
+                    getFileIfChanged(fileDao, input.getS3Bucket(), fileKey, configurationCacheKey);
+            if (file.isNotModified()) {
                 log.debug("Configuration is not refreshed");
                 return false;
             }
-            T configuration = mapper.readValue(configurationStream, type);
-            configurationCacheDao.put(CACHE_IDENTIFIER_CONFIGURATION, configurationCacheKey, configuration);
-            return true;
+            try (InputStream configurationStream = file.getValue()
+                    .orElseThrow(() -> new IllegalArgumentException("Cannot Access to the Data with key: " + fileKey))) {
+                if (!shouldRefresh(configurationCacheKey, configurationStream)) {
+                    log.debug("Configuration is not refreshed");
+                    return false;
+                }
+                T configuration = mapper.readValue(configurationStream, type);
+                configurationCacheDao.put(CACHE_IDENTIFIER_CONFIGURATION, configurationCacheKey, configuration);
+                return true;
+            }
         } catch (IOException e) {
             log.error("Cannot deserialize the Json to the POJO or due to I/O for file {}", fileKey, e);
             return false;

@@ -52,6 +52,24 @@ public class S3ObjectDao implements Dao<String, InputStream> {
      */
     @Override
     public Optional<InputStream> get(String bucketName, String key) {
+        return getIfChanged(bucketName, key, null).getValue();
+    }
+
+    /**
+     * Retrieves an object from Amazon S3 unless its ETag matches {@code knownVersion}.
+     * <p>
+     * The ETag comes from the HeadObject request that already checks the size limit, so an
+     * unchanged object costs that one request and no download.
+     * </p>
+     *
+     * @param bucketName   The name of the S3 bucket containing the object.
+     * @param key          The key of the object in the S3 bucket.
+     * @param knownVersion The ETag of the copy the caller already has, or null if none.
+     * @return The object's content, not modified if its ETag equals {@code knownVersion}, or not found
+     *         if it is missing, too large, or an error occurs.
+     */
+    @Override
+    public ConditionalGetResult<InputStream> getIfChanged(String bucketName, String key, String knownVersion) {
         try {
             HeadObjectRequest headRequest = HeadObjectRequest.builder()
                     .bucket(bucketName)
@@ -62,17 +80,21 @@ public class S3ObjectDao implements Dao<String, InputStream> {
             if (contentLength != null && contentLength > MAX_S3_OBJECT_SIZE_BYTES) {
                 log.warn("S3 object {}/{} exceeds max size: {} bytes (limit: {} bytes). Skipping download.",
                         bucketName, key, contentLength, MAX_S3_OBJECT_SIZE_BYTES);
-                return Optional.empty();
+                return ConditionalGetResult.notFound();
+            }
+            if (knownVersion != null && knownVersion.equals(headResponse.eTag())) {
+                log.debug("S3 object {}/{} is unchanged (ETag {}). Skipping download.", bucketName, key, knownVersion);
+                return ConditionalGetResult.notModified();
             }
 
             GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                     .bucket(bucketName)
                     .key(key)
                     .build();
-            return Optional.of(s3Client.getObject(getObjectRequest));
+            return ConditionalGetResult.found(s3Client.getObject(getObjectRequest));
         } catch (Exception e) {
             log.error("Error getting object with key {} from S3", key, e);
-            return Optional.empty();
+            return ConditionalGetResult.notFound();
         }
     }
 

@@ -3,6 +3,7 @@
 
 package com.amazon.demanddriventrafficevaluator.repository.loader;
 
+import com.amazon.demanddriventrafficevaluator.repository.dao.ConditionalGetResult;
 import com.amazon.demanddriventrafficevaluator.repository.dao.Dao;
 import lombok.extern.log4j.Log4j2;
 import software.amazon.awssdk.core.ResponseInputStream;
@@ -52,6 +53,34 @@ public abstract class DefaultLoader<T extends LoaderInput> implements Loader<T> 
      */
 
     public abstract String getS3ObjectKey(T input);
+
+    /**
+     * Fetches a file unless its version matches the file identifier (ETag) cached under
+     * {@code fileIdentifierCacheKey}, so that an unchanged file is not downloaded.
+     * <p>
+     * If the cached identifier cannot be read, the file is fetched and {@link #shouldRefresh}
+     * decides as before.
+     * </p>
+     *
+     * @param fileDao                The DAO that reads the file.
+     * @param bucket                 The bucket containing the file.
+     * @param fileKey                The key of the file.
+     * @param fileIdentifierCacheKey The key used to cache the file identifier.
+     * @return The file, not found, or not modified.
+     */
+    protected ConditionalGetResult<InputStream> getFileIfChanged(
+            Dao<String, InputStream> fileDao, String bucket, String fileKey, String fileIdentifierCacheKey) {
+        String cachedFileIdentifier;
+        try {
+            cachedFileIdentifier = fileIdentifierCacheDao
+                    .get(CACHE_IDENTIFIER_FILE_IDENTIFIER, fileIdentifierCacheKey)
+                    .orElse(null);
+        } catch (Exception e) {
+            log.error("Fail to get fileIdentifier from the cache, so that the file is downloaded", e);
+            cachedFileIdentifier = null;
+        }
+        return fileDao.getIfChanged(bucket, fileKey, cachedFileIdentifier);
+    }
 
     /**
      * Determines whether the data should be refreshed based on the file identifier (ETag).
